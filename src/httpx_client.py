@@ -1,12 +1,12 @@
 """
-通用的HTTP客户端模块
-为所有需要使用httpx的模块提供统一的客户端配置和方法
-保持通用性，不与特定业务逻辑耦合
+Generic HTTP client module.
+Provides unified client configuration and methods for all modules using httpx.
+Keeps general applicability without coupling to specific business logic.
 
-- 共享 AsyncClient（按代理配置指纹缓存），复用 TCP/TLS 连接，
-  避免每请求新建客户端造成的握手开销
-- 代理配置变化（面板热更新）时指纹变化，旧客户端惰性关闭重建
-- 超时等请求级参数在每次请求时传入，不受客户端实例缓存影响
+- Shared AsyncClient (cached by proxy configuration fingerprint), reuses TCP/TLS connections,
+  avoiding per-request handshake overhead.
+- Fingerprint updates dynamically when proxy settings change; stale clients are closed lazily.
+- Per-request parameters like timeout are passed on invocation.
 """
 
 import asyncio
@@ -20,20 +20,20 @@ from fastapi import Response
 from config import get_proxy_config
 from log import log
 
-# ====================== 共享客户端 ======================
+# ====================== Shared Client ======================
 
-# (代理指纹, AsyncClient) 列表；正常情况下最多两个条目（无代理/有代理）
+# (proxy_fingerprint, AsyncClient) list; normally at most 2 entries (with proxy / without proxy)
 _shared_clients: List[Tuple[str, httpx.AsyncClient]] = []
 _shared_clients_lock = asyncio.Lock()
 
 
 def _client_fingerprint(proxy_url: Optional[str]) -> str:
-    """客户端指纹：代理 URL 不同则不能复用同一客户端"""
+    """Client fingerprint: different proxy URL cannot reuse the same client."""
     return proxy_url or ""
 
 
 async def _build_client(proxy_url: Optional[str]) -> httpx.AsyncClient:
-    """按当前代理配置构建客户端"""
+    """Build client according to current proxy configuration."""
     client_kwargs: Dict[str, Any] = {"timeout": None}
     if proxy_url:
         client_kwargs["proxy"] = proxy_url
@@ -41,36 +41,36 @@ async def _build_client(proxy_url: Optional[str]) -> httpx.AsyncClient:
 
 
 async def _safe_aclose(client: httpx.AsyncClient) -> None:
-    """安全关闭客户端，异常仅告警"""
+    """Safely close client, logging warning on failure."""
     try:
         await client.aclose()
     except Exception as e:
-        log.warning(f"关闭旧 httpx 客户端失败: {e}")
+        log.warning(f"Failed to close old httpx client: {e}")
 
 
 async def _get_shared_client(**kwargs) -> httpx.AsyncClient:
     """
-    获取共享的 AsyncClient（按代理指纹缓存复用）。
+    Get shared AsyncClient (cached and reused by proxy fingerprint).
 
-    调用方不得关闭该客户端（由模块统一管理生命周期，
-    web.py 应用关闭时调用 close_shared_clients）。
+    Callers must not close this client (lifecycle managed by module,
+    closed via close_shared_clients on web.py shutdown).
     """
     proxy_url = await get_proxy_config()
     fingerprint = _client_fingerprint(proxy_url)
 
-    # 快路径：指纹匹配直接复用（无锁读）
+    # Fast path: matching fingerprint reused directly (lock-free read)
     for fp, client in _shared_clients:
         if fp == fingerprint:
             return client
 
-    # 慢路径：创建或重建客户端
+    # Slow path: create or rebuild client
     async with _shared_clients_lock:
-        # 双重检查（并发下可能已被其他请求创建）
+        # Double check (might have been created concurrently by another request)
         for fp, client in _shared_clients:
             if fp == fingerprint:
                 return client
 
-        # 代理热更新：指纹不匹配的旧客户端移出并异步关闭
+        # Proxy hot reload: remove stale clients and close asynchronously
         stale: List[httpx.AsyncClient] = []
         kept: List[Tuple[str, httpx.AsyncClient]] = []
         for fp, client in _shared_clients:
@@ -83,18 +83,18 @@ async def _get_shared_client(**kwargs) -> httpx.AsyncClient:
         new_client = await _build_client(proxy_url)
         _shared_clients.append((fingerprint, new_client))
 
-        # 惰性关闭旧客户端，不阻塞当前请求
+        # Lazily close stale clients without blocking current request
         for old in stale:
             try:
                 asyncio.create_task(_safe_aclose(old))
             except Exception as e:
-                log.warning(f"调度旧客户端关闭失败: {e}")
+                log.warning(f"Failed to schedule old client closure: {e}")
 
         return new_client
 
 
 async def close_shared_clients() -> None:
-    """关闭所有共享客户端（应用关闭时调用）"""
+    """Close all shared clients (called on application shutdown)."""
     async with _shared_clients_lock:
         clients = [c for _, c in _shared_clients]
         _shared_clients.clear()
@@ -102,13 +102,13 @@ async def close_shared_clients() -> None:
         await _safe_aclose(client)
 
 
-# ====================== 客户端获取（兼容旧接口） ======================
+# ====================== Client Retrieval (Legacy Interface Compatibility) ======================
 
 @asynccontextmanager
 async def get_client(
     timeout: float = 30.0, **kwargs
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
-    """获取配置好的异步HTTP客户端（共享复用）"""
+    """Get configured async HTTP client (shared and reused)."""
     yield await _get_shared_client()
 
 
@@ -116,16 +116,16 @@ async def get_client(
 async def get_streaming_client(
     timeout: float = None, **kwargs
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
-    """获取用于流式请求的HTTP客户端（共享复用）"""
+    """Get HTTP client for streaming requests (shared and reused)."""
     yield await _get_shared_client()
 
 
-# ====================== 异步请求方法 ======================
+# ====================== Async Request Methods ======================
 
 async def get_async(
     url: str, headers: Optional[Dict[str, str]] = None, timeout: float = 30.0, **kwargs
 ) -> httpx.Response:
-    """通用异步GET请求"""
+    """Generic async GET request."""
     client = await _get_shared_client()
     return await client.get(url, headers=headers, timeout=timeout, **kwargs)
 
@@ -138,14 +138,14 @@ async def post_async(
     timeout: float = 900.0,
     **kwargs,
 ) -> httpx.Response:
-    """通用异步POST请求"""
+    """Generic async POST request."""
     client = await _get_shared_client()
     return await client.post(
         url, data=data, json=json, headers=headers, timeout=timeout, **kwargs
     )
 
 
-# 调试用：设为 True 时所有流式请求都返回 429
+# Debug flag: when True, all streaming requests return 429
 _MOCK_STREAM_429 = False
 
 async def stream_post_async(
@@ -155,9 +155,9 @@ async def stream_post_async(
     headers: Optional[Dict[str, str]] = None,
     **kwargs,
 ):
-    """流式异步POST请求"""
+    """Streaming async POST request."""
     if _MOCK_STREAM_429:
-        log.warning(f"[MOCK] stream_post_async: 返回模拟429错误")
+        log.warning(f"[MOCK] stream_post_async: returning simulated 429 error")
         yield Response(
             content=json.dumps({"error": {"code": 429, "message": "mock rate limit", "status": "RESOURCE_EXHAUSTED"}}),
             status_code=429,
@@ -168,17 +168,16 @@ async def stream_post_async(
     async with client.stream(
         "POST", url, json=body, headers=headers, **kwargs
     ) as r:
-        # 错误直接返回
+        # Return error response directly
         if r.status_code != 200:
             yield Response(await r.aread(), r.status_code, dict(r.headers))
             return
 
-        # 如果native=True，直接返回bytes流
+        # If native=True, yield raw bytes stream directly
         if native:
             async for chunk in r.aiter_bytes():
                 yield chunk
         else:
-            # 通过aiter_lines转化成str流返回
+            # Yield string lines via aiter_lines
             async for line in r.aiter_lines():
                 yield line
-

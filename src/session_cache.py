@@ -1,15 +1,15 @@
 """
-会话凭证缓存（凭证亲和）
-同一会话（由请求内容派生的稳定 key）绑定同一凭证，命中上游 prompt cache。
+Session credential cache (credential affinity).
+Binds the same session (stable key derived from request content) to the same credential to hit upstream prompt cache.
 
-双后端:
-- Redis（可选）: 设置 REDIS_URL 后启用，多实例共享绑定
-- 内存（默认）: 无 Redis 时自动使用，进程内字典 + 过期清理
+Dual backends:
+- Redis (optional): Enabled when REDIS_URL is set, multi-instance shared binding
+- In-memory (default): Automatically used when Redis is absent, in-process dict + expiration eviction
 
-行为:
-- get: 命中时自动续期 TTL（活跃会话保持绑定，空闲会话过期）
-- set: 每次成功调用后写入/刷新绑定
-- Redis 故障仅跳过该次操作并告警，不影响主流程；内存后端始终可用兜底
+Behavior:
+- get: Renews TTL on cache hit (keeps active sessions bound, evicts idle sessions)
+- set: Writes/refreshes binding after each successful request
+- Redis failures log warnings and fall back to in-memory store without breaking main flow
 """
 
 import asyncio
@@ -20,19 +20,19 @@ from typing import Any, Dict, Optional
 
 from log import log
 
-# 绑定 TTL（秒）：会话空闲超过该时长后解绑
+# Binding TTL (seconds): unbind session after idle period
 SESSION_BINDING_TTL = 3600
 
 _KEY_PREFIX = "agy2api:sess:"
 
-# Redis 客户端（None = 未启用，使用内存后端）
+# Redis client (None = disabled, using in-memory store)
 _redis_client = None
 
-# 内存后端: {session_key: (email, expire_at)}
+# In-memory store: {session_key: (email, expire_at)}
 _memory_store: Dict[str, tuple] = {}
 _memory_lock = asyncio.Lock()
 
-# 内存后端容量上限（防止无限增长），超限时清理过期项后仍超限则丢弃最旧的
+# In-memory capacity limit (prevents unbounded memory growth); evicts expired then oldest entries
 _MEMORY_MAX_ENTRIES = 50000
 
 
@@ -41,12 +41,12 @@ def _now() -> float:
 
 
 def _get_client():
-    """返回已初始化的 Redis 客户端；未启用时返回 None"""
+    """Return initialized Redis client; None when disabled."""
     return _redis_client
 
 
 async def init_redis(redis_url: str) -> bool:
-    """初始化 Redis 连接。连接失败返回 False（回落内存后端），不抛异常。"""
+    """Initialize Redis connection. Returns False on failure without raising exceptions."""
     global _redis_client
     if not redis_url:
         return False
@@ -62,16 +62,16 @@ async def init_redis(redis_url: str) -> bool:
         )
         await client.ping()
         _redis_client = client
-        log.info("会话凭证缓存已连接 Redis")
+        log.info("Session credential cache connected to Redis")
         return True
     except Exception as e:
-        log.warning(f"Redis 连接失败，使用内存后端: {e}")
+        log.warning(f"Redis connection failed, falling back to in-memory store: {e}")
         _redis_client = None
         return False
 
 
 async def close() -> None:
-    """关闭 Redis 连接（应用关闭时调用）"""
+    """Close Redis connection (called on application shutdown)."""
     global _redis_client
     if _redis_client is not None:
         try:
@@ -82,25 +82,25 @@ async def close() -> None:
     _memory_store.clear()
 
 
-# ====================== 会话 key 派生 ======================
+# ====================== Session Key Derivation ======================
 
 def derive_session_key(model_name: str, gemini_request: Dict[str, Any]) -> Optional[str]:
     """
-    从规范化后的 Gemini 请求派生会话 key:
-    hash(模型 + systemInstruction 或 第一条 user 消息)
+    Derive session key from normalized Gemini request:
+    hash(model + systemInstruction or first user message)
 
-    必须在格式转换完成后调用（openai2gemini / anthropic2gemini / 原生 gemini 都已
-    转成 Gemini 格式），保证不同 API 格式的相同内容派生相同的 key。
+    Must be called after format conversion (openai2gemini / anthropic2gemini / native gemini
+    are all normalized to Gemini format), ensuring identical content yields identical key.
 
     Returns:
-        "auto:<hash>" 或 None（无法派生时）
+        "auto:<hash>" or None (when key cannot be derived)
     """
     if not isinstance(gemini_request, dict):
         return None
 
     model_part = model_name if isinstance(model_name, str) else ""
 
-    # 优先 systemInstruction（对话稳定的锚点）
+    # Prioritize systemInstruction (stable anchor for conversation)
     anchor = None
     system_instruction = gemini_request.get("systemInstruction")
     if isinstance(system_instruction, dict):
@@ -108,7 +108,7 @@ def derive_session_key(model_name: str, gemini_request: Dict[str, Any]) -> Optio
         if isinstance(parts, list) and parts:
             anchor = _stable_json(parts)
 
-    # 没有 system 时取第一条 user 消息的 parts
+    # When system is absent, use first user message parts
     if anchor is None:
         contents = gemini_request.get("contents")
         if isinstance(contents, list):
@@ -127,17 +127,17 @@ def derive_session_key(model_name: str, gemini_request: Dict[str, Any]) -> Optio
 
 
 def _stable_json(value: Any) -> Optional[str]:
-    """稳定序列化（排序键），失败返回 None"""
+    """Deterministic JSON serialization (sorted keys), returns None on failure."""
     try:
         return json.dumps(value, sort_keys=True, ensure_ascii=False)
     except (TypeError, ValueError):
         return None
 
 
-# ====================== 绑定读写 ======================
+# ====================== Binding Read/Write ======================
 
 async def get_session_binding(session_key: str) -> Optional[str]:
-    """查询会话绑定的凭证 email；命中时续期 TTL。未绑定/后端故障返回 None。"""
+    """Lookup bound credential email; renews TTL on hit. Returns None if unbound or on error."""
     if not session_key:
         return None
 
@@ -151,14 +151,14 @@ async def get_session_binding(session_key: str) -> Optional[str]:
             await client.expire(redis_key, SESSION_BINDING_TTL)
             return raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
         except Exception as e:
-            log.warning(f"Redis get 会话绑定失败: {e}")
-            # Redis 故障回落内存后端
+            log.warning(f"Redis get session binding failed: {e}")
+            # Fall back to in-memory store on Redis failure
 
     return await _memory_get(session_key)
 
 
 async def set_session_binding(session_key: str, email: str) -> None:
-    """写入/刷新会话绑定（凭证亲和成功后调用）。后端故障仅告警。"""
+    """Save or refresh session binding (called after successful request). Non-fatal on failure."""
     if not session_key or not email:
         return
 
@@ -169,13 +169,13 @@ async def set_session_binding(session_key: str, email: str) -> None:
                 f"{_KEY_PREFIX}{session_key}", SESSION_BINDING_TTL, email
             )
         except Exception as e:
-            log.warning(f"Redis set 会话绑定失败: {e}")
+            log.warning(f"Redis set session binding failed: {e}")
 
     await _memory_set(session_key, email)
 
 
 async def delete_session_binding(session_key: str) -> None:
-    """删除会话绑定（绑定凭证不可用时清除）"""
+    """Delete session binding (e.g. when bound credential becomes unavailable)."""
     if not session_key:
         return
 
@@ -184,13 +184,13 @@ async def delete_session_binding(session_key: str) -> None:
         try:
             await client.delete(f"{_KEY_PREFIX}{session_key}")
         except Exception as e:
-            log.warning(f"Redis delete 会话绑定失败: {e}")
+            log.warning(f"Redis delete session binding failed: {e}")
 
     async with _memory_lock:
         _memory_store.pop(session_key, None)
 
 
-# ====================== 内存后端 ======================
+# ====================== In-Memory Store ======================
 
 async def _memory_get(session_key: str) -> Optional[str]:
     async with _memory_lock:
@@ -201,17 +201,17 @@ async def _memory_get(session_key: str) -> Optional[str]:
         if _now() >= expire_at:
             _memory_store.pop(session_key, None)
             return None
-        # 命中续期
+        # Renew on hit
         _memory_store[session_key] = (email, _now() + SESSION_BINDING_TTL)
         return email
 
 
 async def _memory_set(session_key: str, email: str) -> None:
     async with _memory_lock:
-        # 容量控制：超过上限先清理过期项
+        # Capacity control: evict expired entries first if limit reached
         if len(_memory_store) >= _MEMORY_MAX_ENTRIES:
             _cleanup_expired_locked()
-        # 仍超限则丢弃最旧的一半（按过期时间排序）
+        # If still over limit, drop oldest half (sorted by expiration time)
         if len(_memory_store) >= _MEMORY_MAX_ENTRIES:
             sorted_items = sorted(_memory_store.items(), key=lambda kv: kv[1][1])
             for k, _ in sorted_items[: len(sorted_items) // 2]:
@@ -220,7 +220,7 @@ async def _memory_set(session_key: str, email: str) -> None:
 
 
 def _cleanup_expired_locked() -> None:
-    """清理过期项（须持有锁时调用）"""
+    """Evict expired entries (must be called with lock held)."""
     now = _now()
     expired = [k for k, (_, exp) in _memory_store.items() if now >= exp]
     for k in expired:
@@ -228,5 +228,5 @@ def _cleanup_expired_locked() -> None:
 
 
 def memory_store_size() -> int:
-    """内存后端条目数（诊断用）"""
+    """In-memory store entry count (diagnostic)."""
     return len(_memory_store)

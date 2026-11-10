@@ -1,5 +1,5 @@
 """
-Google OAuth2 认证模块
+Google OAuth2 Authentication Module
 """
 
 import time
@@ -20,13 +20,13 @@ from src.httpx_client import get_async, post_async
 
 
 class TokenError(Exception):
-    """Token相关错误"""
+    """Token-related error."""
 
     pass
 
 
 class Credentials:
-    """凭证类"""
+    """OAuth2 Credentials class."""
 
     def __init__(
         self,
@@ -44,34 +44,34 @@ class Credentials:
         self.expires_at = expires_at
         self.project_id = project_id
 
-        # 反代配置将在使用时异步获取
+        # Proxy configuration will be retrieved asynchronously on use
         self.oauth_base_url = None
         self.token_endpoint = None
 
     def is_expired(self) -> bool:
-        """检查token是否过期"""
+        """Check if token is expired."""
         if not self.expires_at:
             return True
 
-        # 提前3分钟认为过期
+        # Consider expired 3 minutes early
         buffer = timedelta(minutes=3)
         return (self.expires_at - buffer) <= datetime.now(timezone.utc)
 
     async def refresh_if_needed(self) -> bool:
-        """如果需要则刷新token"""
+        """Refresh token if expired."""
         if not self.is_expired():
             return False
 
         if not self.refresh_token:
-            raise TokenError("需要刷新令牌但未提供")
+            raise TokenError("Refresh token required but not provided")
 
         await self.refresh()
         return True
 
     async def refresh(self):
-        """刷新访问令牌"""
+        """Refresh access token."""
         if not self.refresh_token:
-            raise TokenError("无刷新令牌")
+            raise TokenError("No refresh token available")
 
         data = {
             "client_id": self.client_id,
@@ -98,24 +98,24 @@ class Credentials:
                 current_utc = datetime.now(timezone.utc)
                 self.expires_at = current_utc + timedelta(seconds=expires_in)
                 log.debug(
-                    f"Token刷新: 当前UTC时间={current_utc.isoformat()}, "
-                    f"有效期={expires_in}秒, "
-                    f"过期时间={self.expires_at.isoformat()}"
+                    f"Token refreshed: Current UTC={current_utc.isoformat()}, "
+                    f"TTL={expires_in}s, "
+                    f"Expires at={self.expires_at.isoformat()}"
                 )
 
             if "refresh_token" in token_data:
                 self.refresh_token = token_data["refresh_token"]
 
-            log.debug(f"Token刷新成功，过期时间: {self.expires_at}")
+            log.debug(f"Token refresh successful, expires at: {self.expires_at}")
 
         except Exception as e:
             error_msg = str(e)
             status_code = None
             if hasattr(e, 'response') and hasattr(e.response, 'status_code'):
                 status_code = e.response.status_code
-                error_msg = f"Token刷新失败 (HTTP {status_code}): {error_msg}"
+                error_msg = f"Token refresh failed (HTTP {status_code}): {error_msg}"
             else:
-                error_msg = f"Token刷新失败: {error_msg}"
+                error_msg = f"Token refresh failed: {error_msg}"
 
             log.error(error_msg)
             token_error = TokenError(error_msg)
@@ -124,8 +124,8 @@ class Credentials:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Credentials":
-        """从字典创建凭证"""
-        # 处理过期时间
+        """Create credentials from dictionary."""
+        # Handle expiration time
         expires_at = None
         if "expiry" in data and data["expiry"]:
             try:
@@ -138,7 +138,7 @@ class Credentials:
                     else:
                         expires_at = datetime.fromisoformat(expiry_str).replace(tzinfo=timezone.utc)
             except ValueError:
-                log.warning(f"无法解析过期时间: {expiry_str}")
+                log.warning(f"Unable to parse expiration timestamp: {expiry_str}")
 
         return cls(
             access_token=data.get("token") or data.get("access_token", ""),
@@ -150,7 +150,7 @@ class Credentials:
         )
 
     def to_dict(self) -> Dict[str, Any]:
-        """转为字典"""
+        """Convert to dictionary."""
         result = {
             "access_token": self.access_token,
             "refresh_token": self.refresh_token,
@@ -166,7 +166,7 @@ class Credentials:
 
 
 class Flow:
-    """OAuth流程类"""
+    """OAuth Flow class."""
 
     def __init__(
         self, client_id: str, client_secret: str, scopes: List[str], redirect_uri: str = None
@@ -176,7 +176,7 @@ class Flow:
         self.scopes = scopes
         self.redirect_uri = redirect_uri
 
-        # 反代配置将在使用时异步获取
+        # Proxy configuration will be retrieved asynchronously on use
         self.oauth_base_url = None
         self.token_endpoint = None
         self.auth_endpoint = "https://accounts.google.com/o/oauth2/auth"
@@ -184,7 +184,7 @@ class Flow:
         self.credentials: Optional[Credentials] = None
 
     def get_auth_url(self, state: str = None, **kwargs) -> str:
-        """生成授权URL"""
+        """Generate authorization URL."""
         params = {
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
@@ -202,7 +202,7 @@ class Flow:
         return f"{self.auth_endpoint}?{urlencode(params)}"
 
     async def exchange_code(self, code: str) -> Credentials:
-        """用授权码换取token"""
+        """Exchange authorization code for token."""
         data = {
             "client_id": self.client_id,
             "client_secret": self.client_secret,
@@ -221,13 +221,13 @@ class Flow:
 
             token_data = response.json()
 
-            # 计算过期时间
+            # Calculate expiration time
             expires_at = None
             if "expires_in" in token_data:
                 expires_in = int(token_data["expires_in"])
                 expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
-            # 创建凭证对象
+            # Create credentials object
             self.credentials = Credentials(
                 access_token=token_data["access_token"],
                 refresh_token=token_data.get("refresh_token"),
@@ -239,13 +239,13 @@ class Flow:
             return self.credentials
 
         except Exception as e:
-            error_msg = f"获取token失败: {str(e)}"
+            error_msg = f"Failed to acquire token: {str(e)}"
             log.error(error_msg)
             raise TokenError(error_msg)
 
 
 class ServiceAccount:
-    """Service Account类"""
+    """Service Account class."""
 
     def __init__(
         self, email: str, private_key: str, project_id: str = None, scopes: List[str] = None
@@ -255,7 +255,7 @@ class ServiceAccount:
         self.project_id = project_id
         self.scopes = scopes or []
 
-        # 反代配置将在使用时异步获取
+        # Proxy configuration will be retrieved asynchronously on use
         self.oauth_base_url = None
         self.token_endpoint = None
 
@@ -263,7 +263,7 @@ class ServiceAccount:
         self.expires_at: Optional[datetime] = None
 
     def is_expired(self) -> bool:
-        """检查token是否过期"""
+        """Check if token is expired."""
         if not self.expires_at:
             return True
 
@@ -271,7 +271,7 @@ class ServiceAccount:
         return (self.expires_at - buffer) <= datetime.now(timezone.utc)
 
     def create_jwt(self) -> str:
-        """创建JWT令牌"""
+        """Create JWT assertion token."""
         now = int(time.time())
 
         payload = {
@@ -285,7 +285,7 @@ class ServiceAccount:
         return jwt.encode(payload, self.private_key, algorithm="RS256")
 
     async def get_access_token(self) -> str:
-        """获取访问令牌"""
+        """Get access token."""
         if not self.is_expired() and self.access_token:
             return self.access_token
 
@@ -311,13 +311,13 @@ class ServiceAccount:
             return self.access_token
 
         except Exception as e:
-            error_msg = f"Service Account获取token失败: {str(e)}"
+            error_msg = f"Service Account token fetch failed: {str(e)}"
             log.error(error_msg)
             raise TokenError(error_msg)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], scopes: List[str] = None) -> "ServiceAccount":
-        """从字典创建Service Account凭证"""
+        """Create Service Account credentials from dictionary."""
         return cls(
             email=data["client_email"],
             private_key=data["private_key"],
@@ -326,9 +326,9 @@ class ServiceAccount:
         )
 
 
-# 工具函数
+# Utility functions
 async def get_user_info(credentials: Credentials) -> Optional[Dict[str, Any]]:
-    """获取用户信息"""
+    """Fetch user info."""
     await credentials.refresh_if_needed()
 
     try:
@@ -340,54 +340,54 @@ async def get_user_info(credentials: Credentials) -> Optional[Dict[str, Any]]:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        log.error(f"获取用户信息失败: {e}")
+        log.error(f"Failed to fetch user info: {e}")
         return None
 
 
 async def get_user_email(credentials: Credentials) -> Optional[str]:
-    """获取用户邮箱地址"""
+    """Fetch user email address."""
     try:
-        # 确保凭证有效
+        # Ensure credentials are valid
         await credentials.refresh_if_needed()
 
-        # 调用Google userinfo API获取邮箱
+        # Call Google userinfo API to get email
         user_info = await get_user_info(credentials)
         if user_info:
             email = user_info.get("email")
             if email:
-                log.info(f"成功获取邮箱地址: {email}")
+                log.info(f"Successfully fetched email address: {email}")
                 return email
             else:
-                log.warning(f"userinfo响应中没有邮箱信息: {user_info}")
+                log.warning(f"userinfo response missing email field: {user_info}")
                 return None
         else:
-            log.warning("获取用户信息失败")
+            log.warning("Failed to fetch user info")
             return None
 
     except Exception as e:
-        log.error(f"获取用户邮箱失败: {e}")
+        log.error(f"Failed to fetch user email: {e}")
         return None
 
 
 async def fetch_user_email_from_file(cred_data: Dict[str, Any]) -> Optional[str]:
-    """从凭证数据获取用户邮箱地址（支持统一存储）"""
+    """Fetch user email from credential data."""
     try:
-        # 直接从凭证数据创建凭证对象
+        # Create credentials object directly from data
         credentials = Credentials.from_dict(cred_data)
         if not credentials or not credentials.access_token:
-            log.warning("无法从凭证数据创建凭证对象或获取访问令牌")
+            log.warning("Cannot create credentials object or obtain access token from data")
             return None
 
-        # 获取邮箱
+        # Fetch email
         return await get_user_email(credentials)
 
     except Exception as e:
-        log.error(f"从凭证数据获取用户邮箱失败: {e}")
+        log.error(f"Failed to fetch user email from credential data: {e}")
         return None
 
 
 async def validate_token(token: str) -> Optional[Dict[str, Any]]:
-    """验证访问令牌"""
+    """Validate access token."""
     try:
         oauth_base_url = await get_oauth_proxy_url()
         tokeninfo_url = f"{oauth_base_url.rstrip('/')}/tokeninfo?access_token={token}"
@@ -396,7 +396,7 @@ async def validate_token(token: str) -> Optional[Dict[str, Any]]:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        log.error(f"验证令牌失败: {e}")
+        log.error(f"Token validation failed: {e}")
         return None
 
 
@@ -406,7 +406,7 @@ async def fetch_project_id_and_tier(
     api_base_url: str,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
-    从 API 获取 project_id 和订阅等级
+    Fetch project_id and subscription tier from API.
 
     Args:
         access_token: Google OAuth access token
@@ -415,7 +415,7 @@ async def fetch_project_id_and_tier(
 
     Returns:
         (project_id, subscription_tier)
-        subscription_tier 可能是 "FREE", "PRO", "ULTRA" 或 None
+        subscription_tier can be "FREE", "PRO", "ULTRA" or None
     """
     headers = {
         'User-Agent': user_agent,
@@ -425,7 +425,7 @@ async def fetch_project_id_and_tier(
     }
 
     def _map_raw_tier(raw_tier: Optional[str]) -> Optional[str]:
-        """将 loadCodeAssist 返回的 raw tier 按关键词映射为统一 tier。"""
+        """Map raw tier returned from loadCodeAssist to unified tier."""
         if not raw_tier:
             return None
 
@@ -441,7 +441,7 @@ async def fetch_project_id_and_tier(
 
     subscription_tier = None
 
-    # 步骤 1: 尝试 loadCodeAssist
+    # Step 1: Attempt loadCodeAssist
     try:
         project_id, raw_tier = await _try_load_code_assist(api_base_url, headers)
         subscription_tier = _map_raw_tier(raw_tier)
@@ -459,8 +459,8 @@ async def fetch_project_id_and_tier(
     except Exception as e:
         log.warning(f"[fetch_project_id_and_tier] loadCodeAssist failed: {type(e).__name__}: {e}")
 
-    # 获取失败 -> 使用固定回退值，避免空 project_id 写入数据库
-    log.warning("[fetch_project_id_and_tier] 使用回退 project_id: aicode-consumers")
+    # Fallback to avoid writing empty project_id to database
+    log.warning("[fetch_project_id_and_tier] Using fallback project_id: aicode-consumers")
     return "aicode-consumers", subscription_tier
 
 
@@ -469,11 +469,11 @@ async def _try_load_code_assist(
     headers: dict
 ) -> Tuple[Optional[str], Optional[str]]:
     """
-    尝试通过 loadCodeAssist 获取 project_id 和订阅等级
+    Attempt to fetch project_id and subscription tier via loadCodeAssist.
 
     Returns:
-        (project_id, subscription_tier) 元组
-        subscription_tier 可能是 "FREE", "PRO", "ULTRA" 或 None
+        (project_id, subscription_tier) tuple
+        subscription_tier can be "FREE", "PRO", "ULTRA" or None
     """
     request_url = f"{api_base_url.rstrip('/')}/v1internal:loadCodeAssist"
     request_body = {
@@ -501,11 +501,11 @@ async def _try_load_code_assist(
         data = response.json()
         log.debug(f"[loadCodeAssist] Response JSON keys: {list(data.keys())}")
 
-        # 提取订阅等级 - 优先使用 paidTier（更准确反映实际权益）
+        # Extract subscription tier - prioritize paidTier
         paid_tier = data.get("paidTier", {})
         current_tier = data.get("currentTier", {})
 
-        # paidTier.id 优先，然后是 currentTier.id
+        # paidTier.id prioritized over currentTier.id
         subscription_tier = None
         if isinstance(paid_tier, dict) and paid_tier.get("id"):
             subscription_tier = paid_tier.get("id")
@@ -514,11 +514,11 @@ async def _try_load_code_assist(
             subscription_tier = current_tier.get("id")
             log.info(f"[loadCodeAssist] Found currentTier: {subscription_tier}")
 
-        # 检查是否有 currentTier（表示用户已激活）
+        # Check if user has currentTier (indicates user is activated)
         if current_tier:
             log.info("[loadCodeAssist] User is already activated")
 
-            # 使用服务器返回的 project_id
+            # Use server returned project_id
             project_id = data.get("cloudaicompanionProject")
             if project_id:
                 log.info(f"[loadCodeAssist] Successfully fetched project_id: {project_id}, tier: {subscription_tier}")

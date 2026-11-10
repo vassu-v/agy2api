@@ -1,10 +1,7 @@
 import { useEffect } from "react";
 import { AlertCircle, CheckCircle, Info, X } from "lucide-react";
 
-/**
- * 通用消息弹窗
- * type: success / error / info
- */
+
 export default function Modal({ type = "info", title, children, onClose }) {
   useEffect(() => {
     const onKey = (e) => {
@@ -40,7 +37,7 @@ export default function Modal({ type = "info", title, children, onClose }) {
         </div>
         <div className="px-4 py-3 border-t border-dark-700 text-right">
           <button onClick={onClose} className="btn btn-secondary text-xs px-4 py-1.5">
-            关闭
+            Close
           </button>
         </div>
       </div>

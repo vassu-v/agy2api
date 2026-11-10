@@ -1,34 +1,34 @@
 """
 Anthropic Router - Handles Anthropic/Claude format API requests via Antigravity
-通过Antigravity处理Anthropic/Claude格式请求的路由模块
+Router module for handling Anthropic/Claude format requests via Antigravity
 """
 
-# 标准库
+# Standard library
 import json
 import sys
 from pathlib import Path
 
-# 添加项目根目录到Python路径
+# Add project root directory to Python path
 project_root = Path(__file__).resolve().parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# 第三方库
+# Third-party libraries
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
-# 本地模块 - 配置和日志
+# Local modules - Configuration and logging
 from config import get_anti_truncation_max_attempts, get_api_password
 from log import log
 
-# 本地模块 - 工具和认证
+# Local modules - Utilities and authentication
 from src.utils import (
     get_base_model_from_feature_model,
     is_anti_truncation_model,
     authenticate_bearer,
 )
 
-# 本地模块 - 基础路由工具
+# Local modules - Base router utilities
 from src.router.hi_check import is_health_check_request, create_health_check_response
 from src.router.stream_passthrough import (
     build_streaming_response_or_error,
@@ -36,16 +36,16 @@ from src.router.stream_passthrough import (
     read_first_async_item,
 )
 
-# 本地模块 - 数据模型
+# Local modules - Data models
 from src.models import ClaudeRequest, model_to_dict
 
-# 本地模块 - Token估算
+# Local modules - Token estimation
 from src.token_estimator import estimate_input_tokens
 
-# 本地模块 - API 层
+# Local modules - API layer
 from src.api.antigravity import non_stream_request, stream_request
 
-# 本地模块 - 转换器
+# Local modules - Converters
 from src.converter.anthropic2gemini import (
     anthropic_to_gemini_request,
     gemini_to_anthropic_response,
@@ -58,12 +58,12 @@ from src.converter.anti_truncation import (
 )
 
 
-# ==================== 路由器初始化 ====================
+# ==================== Router Initialization ====================
 
 router = APIRouter()
 
 
-# ==================== API 路由 ====================
+# ==================== API Routes ====================
 
 @router.post("/v1/messages")
 async def messages(
@@ -72,67 +72,67 @@ async def messages(
     _token: str = Depends(authenticate_bearer)
 ):
     """
-    处理Anthropic/Claude格式的消息请求（流式和非流式）
+    Handle Anthropic/Claude format message requests (streaming and non-streaming)
 
     Args:
-        claude_request: Anthropic/Claude格式的请求体
-        token: Bearer认证令牌
+        claude_request: Anthropic/Claude format request body
+        _token: Bearer authentication token
     """
     log.debug(f"[ANTIGRAVITY-ANTHROPIC] Request for model: {claude_request.model}")
 
-    # 转换为字典
+    # Convert to dictionary
     normalized_dict = model_to_dict(claude_request)
 
-    # 健康检查
+    # Health check
     if is_health_check_request(normalized_dict, format="anthropic"):
         response = create_health_check_response(format="anthropic")
         return JSONResponse(content=response)
 
-    # 处理模型名称和功能检测
+    # Process model name and feature detection
     use_anti_truncation = is_anti_truncation_model(claude_request.model)
     real_model = get_base_model_from_feature_model(claude_request.model)
 
-    # 获取流式标志
+    # Get streaming flag
     is_streaming = claude_request.stream
 
-    # 对于抗截断模型的非流式请求，给出警告
+    # Warn for non-streaming requests with anti-truncation models
     if use_anti_truncation and not is_streaming:
-        log.warning("抗截断功能仅在流式传输时有效，非流式请求将忽略此设置")
+        log.warning("Anti-truncation feature is only effective during streaming; non-streaming requests will ignore this setting")
 
-    # 更新模型名为真实模型名
+    # Update model name to real model name
     normalized_dict["model"] = real_model
 
-    # 转换为 Gemini 格式 (使用 converter)
+    # Convert to Gemini format (using converter)
     gemini_dict = await anthropic_to_gemini_request(normalized_dict)
 
-    # anthropic_to_gemini_request 不包含 model 字段，需要手动添加
+    # anthropic_to_gemini_request does not include model field, need to add manually
     gemini_dict["model"] = real_model
 
-    # 规范化 Gemini 请求 (使用 antigravity 模式)
+    # Normalize Gemini request (using antigravity mode)
     gemini_dict = await normalize_antigravity_request(gemini_dict)
 
-    # 准备API请求格式 - 提取model并将其他字段放入request中
+    # Prepare API request format - extract model and place other fields into request
     api_request = {
         "model": gemini_dict.pop("model"),
         "request": gemini_dict
     }
 
-    # 请求日志上下文（api_format + 客户端 IP + 客户端原始模型名）
+    # Request log context (api_format + client IP + original client model name)
     log_ctx = {
         "api_format": "anthropic",
         "client_ip": request.client.host if request.client else "",
         "client_model": claude_request.model,
     }
 
-    # ========== 非流式请求 ==========
+    # ========== Non-streaming Request ==========
     if not is_streaming:
-        # 调用 API 层的非流式请求
+        # Call API layer non-streaming request
         response = await non_stream_request(body=api_request, log_ctx=log_ctx)
 
-        # 检查响应状态码
+        # Check response status code
         status_code = getattr(response, "status_code", 200)
 
-        # 提取响应体
+        # Extract response body
         if hasattr(response, "body"):
             response_body = response.body.decode() if isinstance(response.body, bytes) else response.body
         elif hasattr(response, "content"):
@@ -146,7 +146,7 @@ async def messages(
             log.error(f"Failed to parse Gemini response: {e}")
             raise HTTPException(status_code=500, detail="Response parsing failed")
 
-        # 转换为 Anthropic 格式
+        # Convert to Anthropic format
         anthropic_response = gemini_to_anthropic_response(
             gemini_response,
             real_model,
@@ -155,13 +155,13 @@ async def messages(
 
         return JSONResponse(content=anthropic_response, status_code=status_code)
 
-    # ========== 流式请求 ==========
+    # ========== Streaming Request ==========
 
-    # ========== 流式抗截断生成器 ==========
+    # ========== Streaming Anti-truncation Generator ==========
     async def anti_truncation_generator():
         max_attempts = await get_anti_truncation_max_attempts()
 
-        # 首先对payload应用反截断指令
+        # First apply anti-truncation instructions to payload
         anti_truncation_payload = apply_anti_truncation(api_request)
 
         first_attempt_stream = stream_request(body=anti_truncation_payload, native=False, log_ctx=log_ctx)
@@ -186,14 +186,14 @@ async def messages(
                 stream_gen = stream_request(body=payload, native=False, log_ctx=log_ctx)
             return StreamingResponse(stream_gen, media_type="text/event-stream")
 
-        # 创建反截断处理器
+        # Create anti-truncation processor
         processor = AntiTruncationStreamProcessor(
             stream_request_wrapper,
             anti_truncation_payload,
             max_attempts,
         )
 
-        # 包装以确保是bytes流
+        # Wrap to ensure bytes stream
         async def bytes_wrapper():
             async for chunk in processor.process_stream():
                 if isinstance(chunk, str):
@@ -201,7 +201,7 @@ async def messages(
                 else:
                     yield chunk
 
-        # 直接将整个流传递给转换器
+        # Pass the entire stream directly to converter
         async for anthropic_chunk in gemini_stream_to_anthropic_stream(
             bytes_wrapper(),
             real_model,
@@ -210,9 +210,9 @@ async def messages(
             if anthropic_chunk:
                 yield anthropic_chunk
 
-    # ========== 普通流式生成器 ==========
+    # ========== Standard Streaming Generator ==========
     async def normal_stream_generator():
-        # 调用 API 层的流式请求（不使用 native 模式）
+        # Call API layer streaming request (native=False)
         stream_gen = stream_request(body=api_request, native=False, log_ctx=log_ctx)
         try:
             first_chunk = await read_first_async_item(stream_gen)
@@ -223,12 +223,12 @@ async def messages(
             yield first_chunk
             return
 
-        # 包装流式生成器以处理错误响应
+        # Wrap streaming generator to handle error response
         async def gemini_chunk_wrapper():
             async for chunk in prepend_async_item(first_chunk, stream_gen):
-                # 检查是否是Response对象（错误情况）
+                # Check if it is a Response object (error case)
                 if isinstance(chunk, Response):
-                    # 错误响应，不进行转换，直接传递
+                    # Error response, pass through directly without conversion
                     try:
                         error_content = chunk.body if isinstance(chunk.body, bytes) else (chunk.body or b'').encode('utf-8')
                         gemini_error = json.loads(error_content.decode('utf-8'))
@@ -243,13 +243,13 @@ async def messages(
                     yield b"data: [DONE]\n\n"
                     return
                 else:
-                    # 确保是bytes类型
+                    # Ensure bytes type
                     if isinstance(chunk, str):
                         yield chunk.encode('utf-8')
                     else:
                         yield chunk
 
-        # 使用转换器处理整个流
+        # Process entire stream with converter
         async for anthropic_chunk in gemini_stream_to_anthropic_stream(
             gemini_chunk_wrapper(),
             real_model,
@@ -258,9 +258,9 @@ async def messages(
             if anthropic_chunk:
                 yield anthropic_chunk
 
-    # ========== 根据模式选择生成器 ==========
+    # ========== Select Generator Based on Mode ==========
     if use_anti_truncation:
-        log.info("启用流式抗截断功能")
+        log.info("Enabling streaming anti-truncation feature")
         return await build_streaming_response_or_error(anti_truncation_generator())
     else:
         return await build_streaming_response_or_error(normal_stream_generator())
@@ -272,33 +272,33 @@ async def count_tokens(
     _token: str = Depends(authenticate_bearer)
 ):
     """
-    处理Anthropic格式的token计数请求
+    Handle Anthropic format token count requests
     
     Args:
-        request: FastAPI请求对象
-        _token: Bearer认证令牌（由Depends验证）
+        request: FastAPI request object
+        _token: Bearer authentication token (validated by Depends)
     
     Returns:
-        JSONResponse: 包含input_tokens的响应
+        JSONResponse: Response containing input_tokens
     """
     try:
         payload = await request.json()
     except Exception as e:
         return JSONResponse(
             status_code=400,
-            content={"type": "error", "error": {"type": "invalid_request_error", "message": f"JSON 解析失败: {str(e)}"}}
+            content={"type": "error", "error": {"type": "invalid_request_error", "message": f"Failed to parse JSON: {str(e)}"}}
         )
 
     if not isinstance(payload, dict):
         return JSONResponse(
             status_code=400,
-            content={"type": "error", "error": {"type": "invalid_request_error", "message": "请求体必须为 JSON object"}}
+            content={"type": "error", "error": {"type": "invalid_request_error", "message": "Request body must be a JSON object"}}
         )
 
     if not payload.get("model") or not isinstance(payload.get("messages"), list):
         return JSONResponse(
             status_code=400,
-            content={"type": "error", "error": {"type": "invalid_request_error", "message": "缺少必填字段：model / messages"}}
+            content={"type": "error", "error": {"type": "invalid_request_error", "message": "Missing required fields: model / messages"}}
         )
 
     try:
@@ -322,16 +322,16 @@ async def count_tokens(
 
     user_agent = request.headers.get("user-agent", "")
     log.info(
-        f"[ANTIGRAVITY-ANTHROPIC] /messages/count_tokens 收到请求: client={client_host}:{client_port}, "
+        f"[ANTIGRAVITY-ANTHROPIC] /messages/count_tokens received request: client={client_host}:{client_port}, "
         f"model={payload.get('model')}, messages={len(payload.get('messages') or [])}, "
         f"thinking_present={thinking_present}, thinking={thinking_summary}, ua={user_agent}"
     )
 
-    # 简单估算
+    # Simple estimation
     input_tokens = 0
     try:
         input_tokens = estimate_input_tokens(payload)
     except Exception as e:
-        log.error(f"[ANTIGRAVITY-ANTHROPIC] token 估算失败: {e}")
+        log.error(f"[ANTIGRAVITY-ANTHROPIC] Failed to estimate tokens: {e}")
 
     return JSONResponse(content={"input_tokens": input_tokens})

@@ -1,6 +1,6 @@
 """
-请求日志路由模块 - 处理 /usage-logs/* 相关的HTTP请求
-查询 usage_log 表：分页列表、聚合统计、清理、请求体详细日志读取
+Request log route module - Handles HTTP requests related to /usage-logs/*
+Query usage_log table: paginated list, aggregate statistics, cleanup, request body detail log reading
 """
 
 import asyncio
@@ -19,7 +19,7 @@ from src.usage_log import clear_usage_logs, flush_usage_logs
 from src.utils import verify_panel_token
 
 
-# 创建路由器
+# Create router
 router = APIRouter(prefix="/usage-logs", tags=["usage-logs"])
 
 
@@ -37,15 +37,15 @@ async def get_usage_logs(
     is_stream: Optional[bool] = None,
     status_code: Optional[int] = None,
 ):
-    """分页查询请求日志（新 -> 旧）"""
+    """Paginated query of request logs (newest -> oldest)."""
     try:
         if limit < 1 or limit > 1000:
-            raise HTTPException(status_code=400, detail="limit 必须在 1-1000 之间")
+            raise HTTPException(status_code=400, detail="limit must be between 1 and 1000")
         if offset < 0:
-            raise HTTPException(status_code=400, detail="offset 不能为负数")
+            raise HTTPException(status_code=400, detail="offset cannot be negative")
 
         database = await get_database()
-        # 批量写队列中的待落库日志先刷盘，保证面板看到最新数据
+        # Flush pending logs in the batch write queue to disk first to ensure the panel sees the latest data
         await flush_usage_logs()
         items, total = await database.query_usage_logs(
             offset=offset,
@@ -63,7 +63,7 @@ async def get_usage_logs(
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"查询请求日志失败: {e}")
+        log.error(f"Failed to query request logs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -76,10 +76,10 @@ async def get_usage_stats(
     credential_email: str = "",
     api_format: str = "",
 ):
-    """聚合统计：请求数 / 成功失败 / token 汇总 / 平均耗时 / 每模型分布"""
+    """Aggregate statistics: request count / success & failure / token summary / average duration / distribution per model."""
     try:
         database = await get_database()
-        # 批量写队列中的待落库日志先刷盘，保证统计完整
+        # Flush pending logs in the batch write queue to disk first to ensure complete statistics
         await flush_usage_logs()
         stats = await database.usage_log_stats(
             start_timestamp=start_timestamp,
@@ -90,7 +90,7 @@ async def get_usage_stats(
         )
         return JSONResponse(content=stats)
     except Exception as e:
-        log.error(f"查询日志统计失败: {e}")
+        log.error(f"Failed to query log statistics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -99,63 +99,63 @@ async def clear_logs(
     token: str = Depends(verify_panel_token),
     days: int = 30,
 ):
-    """清理 N 天前的日志，返回删除条数"""
+    """Clean up logs older than N days, return deleted count."""
     try:
         if days < 0:
-            raise HTTPException(status_code=400, detail="天数不能为负数")
+            raise HTTPException(status_code=400, detail="Days cannot be negative")
         if days == 0:
-            # 0 = 删除所有（cutoff = now），同步清空请求体详细日志文件
+            # 0 = delete all (cutoff = now), simultaneously clear detailed request body log files
             deleted = await clear_usage_logs(0)
             files_deleted = await asyncio.to_thread(clear_request_body_logs)
             return JSONResponse(content={
-                "message": "已清理全部日志",
+                "message": "All logs cleared",
                 "deleted": deleted,
                 "files_deleted": files_deleted,
             })
         deleted = await clear_usage_logs(days)
-        # 同步删除 N 天前的请求体详细日志文件
+        # Simultaneously delete detailed request body log files older than N days
         files_deleted = await asyncio.to_thread(
             clear_request_body_logs, time.time() - days * 86400
         )
         return JSONResponse(content={
-            "message": f"已清理 {days} 天前的日志",
+            "message": f"Cleared logs older than {days} days",
             "deleted": deleted,
             "files_deleted": files_deleted,
         })
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"清理日志失败: {e}")
+        log.error(f"Failed to clear logs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/truncate")
 async def truncate_logs(token: str = Depends(verify_panel_token)):
-    """清空日志：直接 DROP 整张 usage_log 表并重建，不留任何残留"""
+    """Clear logs: directly DROP the entire usage_log table and recreate it, leaving no residue."""
     try:
         database = await get_database()
-        # 先刷掉批量写队列中的待落库日志
+        # Flush pending logs in the batch write queue first
         await flush_usage_logs()
-        # 先统计当前条数用于返回
+        # Count current records first for response
         _, total = await database.query_usage_logs(offset=0, limit=1)
 
         async with database.session() as s:
             await s.execute(text(f"DROP TABLE IF EXISTS {UsageLog.__tablename__}"))
 
-        # 重新建表（走统一的建表逻辑，保证结构最新）
+        # Recreate table (using unified table creation logic to ensure latest schema)
         async with database._engine.begin() as conn:
             await conn.run_sync(database._create_tables)
 
-        # 同步清空全部请求体详细日志文件
+        # Simultaneously clear all detailed request body log files
         files_deleted = await asyncio.to_thread(clear_request_body_logs)
 
         return JSONResponse(content={
-            "message": "已清空全部日志（表已重建）",
+            "message": "All logs cleared (table recreated)",
             "deleted": total,
             "files_deleted": files_deleted,
         })
     except Exception as e:
-        log.error(f"清空日志失败: {e}")
+        log.error(f"Failed to clear logs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -164,22 +164,22 @@ async def get_request_body_log(
     path: str,
     token: str = Depends(verify_panel_token),
 ):
-    """按文件索引从磁盘读取请求体详细日志（JSON）"""
+    """Read detailed request body log (JSON) from disk by file index."""
     try:
         data = await asyncio.to_thread(read_request_body_log, path)
         if data is None:
-            raise HTTPException(status_code=404, detail="详细日志文件不存在或已清理")
+            raise HTTPException(status_code=404, detail="Detailed log file does not exist or has been cleaned up")
         return JSONResponse(content=data)
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"读取请求体详细日志失败: {e}")
+        log.error(f"Failed to read request body detail log: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/config")
 async def get_usage_log_config(token: str = Depends(verify_panel_token)):
-    """获取日志开关配置"""
+    """Get log toggle configuration."""
     return JSONResponse(content={
         "enabled": await get_usage_log_enabled(),
     })

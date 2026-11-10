@@ -1,5 +1,5 @@
 """
-根路由模块 - 处理控制面板主页（编译后的前端）
+Root route module - Serves control panel home page (compiled frontend)
 """
 
 import os
@@ -10,10 +10,10 @@ from fastapi.responses import FileResponse, HTMLResponse
 from log import log
 
 
-# 创建路由器
+# Create router
 router = APIRouter(tags=["root"])
 
-# 编译后的前端目录
+# Compiled frontend directory
 FRONTEND_DIST_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "dist",
@@ -21,7 +21,7 @@ FRONTEND_DIST_DIR = os.path.join(
 
 
 def _safe_join_dist(path: str) -> str:
-    """安全地拼接前端静态资源路径，防止路径穿越"""
+    """Safely join frontend static asset path to prevent path traversal."""
     full = os.path.normpath(os.path.join(FRONTEND_DIST_DIR, path))
     dist_root = os.path.normpath(FRONTEND_DIST_DIR)
     if not full.startswith(dist_root + os.sep) and full != dist_root:
@@ -31,7 +31,7 @@ def _safe_join_dist(path: str) -> str:
 
 @router.get("/", response_class=HTMLResponse)
 async def serve_control_panel():
-    """提供编译后的控制面板首页"""
+    """Serve compiled control panel home page."""
     index_path = os.path.join(FRONTEND_DIST_DIR, "index.html")
     try:
         with open(index_path, "r", encoding="utf-8") as f:
@@ -39,16 +39,16 @@ async def serve_control_panel():
     except FileNotFoundError:
         raise HTTPException(
             status_code=500,
-            detail="前端资源未构建，请先运行 frontend 目录下的 npm run build",
+            detail="Frontend assets not built. Please run 'npm run build' in the frontend directory first.",
         )
     except Exception as e:
-        log.error(f"加载控制面板页面失败: {e}")
-        raise HTTPException(status_code=500, detail="服务器内部错误")
+        log.error(f"Failed to load control panel page: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/assets/{file_path:path}")
 async def serve_frontend_assets(file_path: str):
-    """提供前端静态资源（JS/CSS等）"""
+    """Serve frontend static assets (JS/CSS, etc.)."""
     full_path = _safe_join_dist(os.path.join("assets", file_path))
     if not os.path.isfile(full_path):
         raise HTTPException(status_code=404, detail="Not Found")
@@ -57,8 +57,8 @@ async def serve_frontend_assets(file_path: str):
 
 @router.get("/favicon.ico")
 async def serve_favicon():
-    """提供 favicon"""
-    # 优先从编译后的前端目录提供
+    """Serve favicon."""
+    # Prefer serving from compiled frontend directory
     favicon_path = os.path.join(FRONTEND_DIST_DIR, "favicon.ico")
     if os.path.isfile(favicon_path):
         return FileResponse(favicon_path, media_type="image/x-icon")

@@ -1,13 +1,13 @@
 """
-Antigravity Format Utilities - 独立的 Antigravity 请求处理和转换工具
+Antigravity Format Utilities - Independent Antigravity request processing and conversion utilities.
 
-设计要点:
-  * 每个模型家族在 resolve_profile 里有独立的一行配置 (后端模型 ID / 思考方式)
-  * 所有模型禁用预填充 (profile.no_prefill 恒为 True)
-  * 不修改调用方传入的 request (generationConfig / thinkingConfig / contents 均先复制)
+Design notes:
+  * Each model family has an independent line of configuration in resolve_profile (backend model ID / thinking mode).
+  * All models disable prefill (profile.no_prefill is always True).
+  * Does not mutate caller-supplied request (generationConfig / thinkingConfig / contents are copied first).
 ────────────────────────────────────────────────────────────────
-按项目要求:
-- 使用 print 输出 warning/error，去掉 debug 日志
+Project requirements:
+- Use print for warning/error output; debug logs removed.
 """
 import json
 import re
@@ -24,18 +24,18 @@ from config import (
 )
 from src.converter.thoughtSignature_fix import SKIP_THOUGHT_SIGNATURE_VALIDATOR
 
-# ==================== 常量配置 ====================
+# ==================== Constant Configurations ====================
 
-# 图片生成基础模型名（上游变更时仅需改这里）
+# Base model name for image generation (only modify here when upstream changes)
 IMAGE_BASE_MODEL = "gemini-3.1-flash-image"
 
-# 图片生成支持的宽高比
+# Supported aspect ratios for image generation
 SUPPORTED_ASPECT_RATIOS = [
     (1, 1), (2, 3), (3, 2), (3, 4), (4, 3),
     (4, 5), (5, 4), (9, 16), (16, 9), (21, 9),
 ]
 
-# ==================== Gemini API 安全配置 ====================
+# ==================== Gemini API Safety Settings ====================
 
 DEFAULT_SAFETY_SETTINGS = [
     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "OFF"},
@@ -52,7 +52,7 @@ DEFAULT_SAFETY_SETTINGS = [
 
 MAX_OUTPUT_TOKENS = 64000
 TOP_K = 64
-_CLAUDE_THINKING_SIGNATURE = "skip_thought_signature_validator"  # 官方文档推荐的虚拟签名
+_CLAUDE_THINKING_SIGNATURE = "skip_thought_signature_validator"  # Virtual signature recommended by official documentation
 
 
 def _append_schema_hint(schema: Dict[str, Any], hint: str) -> None:
@@ -360,10 +360,10 @@ def _ensure_empty_tool_schema_for_claude(tools: Any, model_name: str) -> Any:
 
         return normalized_tools
 
-    # 对于 Gemini 模型：
-    # 后端需要标准的 functionDeclarations 格式。
-    # 并且，必须只能使用 "parameters" 字段，如果使用了 "parametersJsonSchema"，
-    # 会报 "parameters_json_schema must not be set when parameters is set" 等冲突错误
+    # For Gemini models:
+    # Backend requires standard functionDeclarations format.
+    # Furthermore, only the "parameters" field must be used; if "parametersJsonSchema" is used,
+    # it causes conflicts like "parameters_json_schema must not be set when parameters is set".
     normalized_tools = []
     for tool in tools:
         if not isinstance(tool, dict):
@@ -372,7 +372,7 @@ def _ensure_empty_tool_schema_for_claude(tools: Any, model_name: str) -> Any:
 
         normalized_tool = tool.copy()
 
-        # 1. 如果包含 Anthropic 原生的 "custom" 工具格式，将其转换为 Gemini 的 functionDeclarations 格式
+        # 1. If Anthropic native "custom" tool format is present, convert it to Gemini functionDeclarations format
         custom_tool = normalized_tool.get("custom")
         if isinstance(custom_tool, dict):
             schema = custom_tool.get("input_schema") or custom_tool.get("inputSchema")
@@ -388,7 +388,7 @@ def _ensure_empty_tool_schema_for_claude(tools: Any, model_name: str) -> Any:
             })
             continue
 
-        # 2. 如果包含标准的 functionDeclarations 格式，确保参数不为空且只使用 parameters 字段
+        # 2. If standard functionDeclarations format is present, ensure parameters is non-empty and only use parameters field
         declarations = normalized_tool.get("functionDeclarations") or normalized_tool.get("function_declarations")
         if isinstance(declarations, list):
             normalized_declarations = []
@@ -398,7 +398,7 @@ def _ensure_empty_tool_schema_for_claude(tools: Any, model_name: str) -> Any:
                     continue
 
                 normalized_declaration = declaration.copy()
-                # 兼容不同字段格式并归一化到 parameters
+                # Normalize various field formats to parameters
                 schema = (
                     normalized_declaration.get("parameters")
                     or normalized_declaration.get("parametersJsonSchema")
@@ -408,7 +408,7 @@ def _ensure_empty_tool_schema_for_claude(tools: Any, model_name: str) -> Any:
                 if schema in (None, {}, []):
                     schema = {"type": "object", "properties": {}}
 
-                # 只保留 parameters 字段，防止与 parametersJsonSchema 冲突
+                # Retain only the parameters field to prevent conflict with parametersJsonSchema
                 normalized_declaration["parameters"] = schema
                 normalized_declaration.pop("parametersJsonSchema", None)
                 normalized_declaration.pop("parameters_json_schema", None)
@@ -446,13 +446,13 @@ def _normalize_part_thought_signature(part: Dict[str, Any], model_name: str) -> 
 
 def _ensure_tool_call_ids(contents: Any, model_name: str) -> Any:
     """
-    确保 functionCall/functionResponse 携带 id 字段 (仅 Claude)。
+    Ensure functionCall/functionResponse carry an id field (Claude only).
 
-    Antigravity 后端在目标模型为 Claude 时，会将 Gemini 的
-    functionCall/functionResponse 内部转换为 Anthropic 的
-    tool_use/tool_result，而后者的 id 是必填字段。原生 Gemini 请求
-    可能不带 id，因此这里按 name 补全缺失的 id，保证同一次调用的
-    functionCall 与 functionResponse 使用相同 id。不修改入参。
+    When the target model is Claude, the Antigravity backend internally converts
+    Gemini functionCall/functionResponse to Anthropic tool_use/tool_result,
+    where id is a required field. Native Gemini requests may lack an id,
+    so missing ids are filled in based on name to ensure functionCall and
+    functionResponse for the same call share the same id. Does not mutate inputs.
     """
     if "claude" not in (model_name or "").lower():
         return contents
@@ -494,12 +494,12 @@ def _ensure_tool_call_ids(contents: Any, model_name: str) -> Any:
 
 def _parse_size_to_image_config(size_str: str) -> Dict[str, str]:
     """
-    解析用户传入的 size 参数为 Gemini imageConfig 参数
+    Parse user-supplied size parameter into Gemini imageConfig parameters.
 
-    支持格式: "1024x1536", "1024*1536", "1024X1536"
+    Supported formats: "1024x1536", "1024*1536", "1024X1536"
 
     Returns:
-        包含 aspectRatio 和/或 imageSize 的字典
+        Dictionary containing aspectRatio and/or imageSize
     """
     config = {}
     size_str = size_str.strip()
@@ -513,7 +513,7 @@ def _parse_size_to_image_config(size_str: str) -> Dict[str, str]:
     if width <= 0 or height <= 0:
         return config
 
-    # 计算最接近的支持宽高比
+    # Calculate closest supported aspect ratio
     target_ratio = width / height
     best_ratio = None
     best_diff = float("inf")
@@ -525,7 +525,7 @@ def _parse_size_to_image_config(size_str: str) -> Dict[str, str]:
     if best_ratio:
         config["aspectRatio"] = best_ratio
 
-    # 根据最大边长确定 imageSize（使用最接近的档位）
+    # Determine imageSize based on the maximum dimension (using closest tier)
     max_dim = max(width, height)
     if max_dim <= 1280:
         config["imageSize"] = "1K"
@@ -542,22 +542,22 @@ def prepare_image_generation_request(
     model: str
 ) -> Dict[str, Any]:
     """
-    图像生成模型请求体后处理
+    Post-process request body for image generation models.
 
-    支持三种方式指定图片参数（优先级从高到低）:
-    1. size 参数: 如 "1024x1536"，自动计算 aspectRatio 和 imageSize
-    2. 模型名后缀: 如 -4k, -2k, -16x9, -1x1
-    3. 默认值: 不设置额外参数
+    Supports three methods to specify image parameters (in descending order of priority):
+    1. size parameter: e.g. "1024x1536", automatically calculates aspectRatio and imageSize
+    2. Model name suffix: e.g. -4k, -2k, -16x9, -1x1
+    3. Default value: do not set extra parameters
     """
     request_body = request_body.copy()
     model_lower = model.lower()
 
-    # 优先使用 size 参数
+    # Prioritize size parameter
     size_str = request_body.pop("size", None)
     if size_str:
         image_config = _parse_size_to_image_config(size_str)
     else:
-        # 从模型名后缀解析
+        # Parse from model name suffix
         image_size = "4K" if "-4k" in model_lower else "2K" if "-2k" in model_lower else None
 
         aspect_ratio = None
@@ -575,54 +575,54 @@ def prepare_image_generation_request(
         if image_size:
             image_config["imageSize"] = image_size
 
-    request_body["model"] = IMAGE_BASE_MODEL  # 统一使用基础模型名
+    request_body["model"] = IMAGE_BASE_MODEL  # Standardize to base model name
     request_body["generationConfig"] = {
         "candidateCount": 1,
         "imageConfig": image_config
     }
 
-    # 移除不需要的字段
+    # Remove unneeded fields
     for key in ("systemInstruction", "tools", "toolConfig"):
         request_body.pop(key, None)
 
     return request_body
 
 
-# ==================== 模型配置 (关键词匹配) ====================
+# ==================== Model Configuration (Keyword Matching) ====================
 
 @dataclass(frozen=True)
 class ModelProfile:
     family: str                     # "gemini4" | "gemini3" | "claude" | "image" | "other"
-    upstream: str                   # 实际发给 Antigravity 后端的模型 ID
-    thinking: str = "none"          # "route" | "budget" | "none"，见 _apply_thinking
-    thinking_budget: int = 1024     # 仅 thinking == "budget" 时使用
-    no_prefill: bool = True         # 所有模型禁用预填充
+    upstream: str                   # Actual model ID sent to Antigravity backend
+    thinking: str = "none"          # "route" | "budget" | "none", see _apply_thinking
+    thinking_budget: int = 1024     # Only used when thinking == "budget"
+    no_prefill: bool = True         # All models disable prefill
 
 
-# 精确别名: 客户端模型名 -> 后端真实 ID
+# Exact aliases: client model name -> backend real ID
 _UPSTREAM_ALIASES: Dict[str, str] = {
-    # gemini-3.1-pro-* 已从上游模型列表下线，别名已删除
+    # gemini-3.1-pro-* has been retired from upstream model list, alias removed
 }
 
 
 async def _get_model_rewrite_rules():
-    """读取生效的模型名复写规则；未启用时返回 None"""
+    """Read effective model name rewrite rules; returns None when disabled."""
     enabled, rules = await get_model_rewrite_filter()
     return rules if enabled and rules else None
 
 
 def resolve_profile(model: str) -> ModelProfile:
     """
-    按关键词匹配模型，自上而下第一个命中的规则生效:
+    Match model by keyword, the first matching rule from top to bottom takes effect:
 
-      image 图片生成，走独立路径
-      claude-opus-5-5 / claude-sonnet-5-5   思考强度由模型 ID 后缀决定，原样透传
-      claude-opus-4-6   映射到 claude-opus-4-6-thinking
-      claude-sonnet-4-6-thinking    映射到 claude-sonnet-4-6
-      claude (其他)  原样透传
-      gemini-4*             (如 gemini-4-argon-low/-medium/-high) 思考深度由模型 ID 后缀决定，原样透传
-      gemini-3* / *-agent   思考深度由模型 ID (-low/-medium/-high/-tiered/-extra-low) 决定
-      其他  名字含 think 才发 thinkingBudget，原样透传
+      image: image generation, takes independent path
+      claude-opus-5-5 / claude-sonnet-5-5: thinking strength determined by model ID suffix, pass through as-is
+      claude-opus-4-6: map to claude-opus-4-6-thinking
+      claude-sonnet-4-6-thinking: map to claude-sonnet-4-6
+      claude (others): pass through as-is
+      gemini-4*: (e.g. gemini-4-argon-low/-medium/-high) thinking depth determined by model ID suffix, pass through as-is
+      gemini-3* / *-agent: thinking depth determined by model ID (-low/-medium/-high/-tiered/-extra-low)
+      others: only send thinkingBudget if name contains think, pass through as-is
     """
     model = model or ""
     lower = model.lower()
@@ -632,7 +632,7 @@ def resolve_profile(model: str) -> ModelProfile:
         return ModelProfile("image", model)
 
     if "claude" in lower:
-        # Opus 5.5 / Sonnet 5.5: 思考强度由模型 ID 后缀 (-low/-high 等) 决定，原样透传
+        # Opus 5.5 / Sonnet 5.5: thinking strength determined by model ID suffix (-low/-high etc.), pass through as-is
         normalized = lower.replace(".", "-")
         if "claude-opus-5-5" in normalized or "claude-sonnet-5-5" in normalized:
             return ModelProfile("claude", model, "route")
@@ -653,22 +653,22 @@ def resolve_profile(model: str) -> ModelProfile:
     return ModelProfile("other", model, think)
 
 
-# ==================== 模型特性辅助函数 ====================
+# ==================== Model Feature Helper Functions ====================
 
 def is_thinking_model(model_name: str) -> bool:
-    """检查是否为思考模型 (模型名包含 think，仅为兼容保留)"""
+    """Check if model is a thinking model (model name contains think, kept for compatibility)."""
     return "think" in model_name.lower()
 
 
 def _apply_thinking(profile: ModelProfile, generation_config: Dict[str, Any], return_thoughts: bool) -> None:
-    """按模型 profile 写入 thinkingConfig (就地修改 generation_config，thinkingConfig 先复制)"""
+    """Write thinkingConfig based on model profile (modifies generation_config in-place, thinkingConfig copied first)."""
     if profile.thinking == "none":
         return
 
     thinking_config = dict(generation_config.get("thinkingConfig") or {})
     thinking_config.pop("thinkingLevel", None)
     if profile.thinking == "route":
-        # 思考深度由模型 ID 决定，level/budget 会与之冲突
+        # Thinking depth is determined by model ID; level/budget would conflict with it
         thinking_config.pop("thinkingBudget", None)
     else:  # "budget"
         thinking_config["thinkingBudget"] = profile.thinking_budget
@@ -676,21 +676,21 @@ def _apply_thinking(profile: ModelProfile, generation_config: Dict[str, Any], re
     generation_config["thinkingConfig"] = thinking_config
 
 
-# ==================== contents 处理 ====================
+# ==================== contents Processing ====================
 
 async def _get_sensitive_word_patterns():
-    """读取生效的敏感词正则列表；未启用时返回 None（避免无谓的配置读取开销为 0 时的开销可忽略）"""
+    """Read effective sensitive word regex list; returns None when disabled (negligible overhead when 0)."""
     enabled, patterns = await get_sensitive_word_filter()
     return patterns if enabled and patterns else None
 
 
 def _filter_text(text: str, patterns) -> str:
-    """对文本应用敏感词过滤（大小写不敏感，命中替换为空）"""
+    """Apply sensitive word filtering to text (case-insensitive, matched words replaced with empty string)."""
     return apply_sensitive_word_filter(text, patterns)
 
 
 def _filter_contents_sensitive_words(contents: Any, patterns) -> Any:
-    """对 contents 内所有 text part 应用敏感词过滤（不修改入参）"""
+    """Apply sensitive word filtering to all text parts in contents (does not mutate inputs)."""
     if not isinstance(contents, list):
         return contents
 
@@ -717,7 +717,7 @@ def _filter_contents_sensitive_words(contents: Any, patterns) -> Any:
 
 
 def _filter_system_instruction_sensitive_words(system_instruction: Any, patterns) -> Any:
-    """对 systemInstruction 的 text part 应用敏感词过滤（不修改入参）"""
+    """Apply sensitive word filtering to text parts in systemInstruction (does not mutate inputs)."""
     if not (isinstance(system_instruction, dict) and isinstance(system_instruction.get("parts"), list)):
         return system_instruction
 
@@ -737,7 +737,7 @@ def _filter_system_instruction_sensitive_words(system_instruction: Any, patterns
 
 
 def _clean_contents(contents: List[Any], model_name: str) -> List[Any]:
-    """过滤空 part、规范 thoughtSignature、修正 text 字段类型、丢弃没有有效 part 的 content"""
+    """Filter empty parts, normalize thoughtSignature, fix text field type, discard contents without valid parts."""
     cleaned_contents = []
     for content in contents:
         if not (isinstance(content, dict) and "parts" in content):
@@ -749,15 +749,15 @@ def _clean_contents(contents: List[Any], model_name: str) -> List[Any]:
             if not isinstance(part, dict):
                 continue
 
-            # 必须先归一化 text（rstrip 可能把 "\n" 之类削成 ""）再做有效性校验，
-            # 否则纯空白 text 先通过校验、后变空串，发给上游会转成缺少 text 字段的
-            # text 块（Claude 报 messages.N.content.M.text.text: Field required）
+            # Must normalize text first (rstrip may reduce "\n" etc. to "") before validity check;
+            # otherwise whitespace-only text passes validation and becomes empty, turning into a text block
+            # lacking a text field when sent upstream (Claude reports messages.N.content.M.text.text: Field required).
             if "text" in part:
-                part = part.copy()  # copy-on-write，避免原地修改调用方的 contents
+                part = part.copy()  # copy-on-write, avoid modifying caller's contents in-place
                 text_value = part["text"]
                 if isinstance(text_value, list):
-                    # 元素可能是 {"type":"text","text":"..."}，不能直接 str(dict)，否则会污染 model 历史
-                    print(f"[ANTIGRAVITY_FIX] text 字段是列表，自动合并: {text_value}", flush=True)
+                    # Element may be {"type":"text","text":"..."}, cannot str(dict) directly or it will pollute model history
+                    print(f"[ANTIGRAVITY_FIX] text field is a list, automatically merging: {text_value}", flush=True)
                     text_parts = []
                     for t in text_value:
                         if isinstance(t, dict) and "text" in t:
@@ -770,21 +770,21 @@ def _clean_contents(contents: List[Any], model_name: str) -> List[Any]:
                 elif isinstance(text_value, str):
                     part["text"] = text_value.rstrip()
                 else:
-                    print(f"[ANTIGRAVITY_FIX] text 字段类型异常 ({type(text_value)}), 转为字符串: {text_value}", flush=True)
+                    print(f"[ANTIGRAVITY_FIX] abnormal text field type ({type(text_value)}), converting to string: {text_value}", flush=True)
                     part["text"] = str(text_value)
 
                 if part["text"] == "":
-                    # part 还有其他有效字段（如 functionCall）时仅去掉 text 字段
+                    # When part has other valid fields (e.g. functionCall), only remove text field
                     part.pop("text", None)
 
-            # thought 字段可以为空，其余字段至少要有一个非空值
+            # thought field can be empty; remaining fields must have at least one non-empty value
             has_valid_value = any(
                 value not in (None, "", {}, [])
                 for key, value in part.items()
                 if key != "thought"
             )
             if not has_valid_value:
-                print(f"[ANTIGRAVITY_FIX] 移除空的或无效的 part: {part}", flush=True)
+                print(f"[ANTIGRAVITY_FIX] Removing empty or invalid part: {part}", flush=True)
                 continue
 
             part = _normalize_part_thought_signature(part, model_name)
@@ -796,12 +796,12 @@ def _clean_contents(contents: List[Any], model_name: str) -> List[Any]:
             cleaned_content["parts"] = valid_parts
             cleaned_contents.append(cleaned_content)
         else:
-            print(f"[ANTIGRAVITY_FIX] 跳过没有有效 parts 的 content: {content.get('role')}", flush=True)
+            print(f"[ANTIGRAVITY_FIX] Skipping content without valid parts: {content.get('role')}", flush=True)
     return cleaned_contents
 
 
 def _strip_trailing_model_turns(contents: List[Any]) -> Tuple[List[Any], int]:
-    """循环移除末尾的 model 消息，保证以用户消息结尾"""
+    """Iteratively remove trailing model messages to ensure ending with a user message."""
     contents = list(contents)
     removed = 0
     while contents and isinstance(contents[-1], dict) and contents[-1].get("role") == "model":
@@ -812,9 +812,9 @@ def _strip_trailing_model_turns(contents: List[Any]) -> Tuple[List[Any], int]:
 
 def _prepare_claude_history(contents: List[Any], generation_config: Dict[str, Any]) -> List[Any]:
     """
-    Claude 专属历史处理:
-    - 含工具调用 (MCP 场景): 移除 thinkingConfig，避免失效
-    - 否则: 给最后一条 model 消息补一个 thinking 块 (虚拟签名跳过验证)
+    Claude-specific history processing:
+    - Contains tool calls (MCP scenario): remove thinkingConfig to avoid failure
+    - Otherwise: prepend a thinking block to the last model message (dummy signature skips validation)
     """
     has_tool_calls = any(
         isinstance(content, dict)
@@ -825,7 +825,7 @@ def _prepare_claude_history(contents: List[Any], generation_config: Dict[str, An
         for content in contents
     )
     if has_tool_calls:
-        print("[ANTIGRAVITY] 检测到工具调用（MCP场景），移除 thinkingConfig 避免失效", flush=True)
+        print("[ANTIGRAVITY] Detected tool calls (MCP scenario), removing thinkingConfig to avoid failure", flush=True)
         generation_config.pop("thinkingConfig", None)
         return contents
 
@@ -842,50 +842,50 @@ def _prepare_claude_history(contents: List[Any], generation_config: Dict[str, An
     return contents
 
 
-# ==================== 统一的 Antigravity 请求后处理 ====================
+# ==================== Unified Antigravity Request Post-Processing ====================
 
 async def normalize_antigravity_request(
     request: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    规范化 Antigravity 请求
+    Normalize Antigravity request.
 
-    处理逻辑:
-    0. 敏感词过滤（contents / systemInstruction，面板可配，热更新）
-    0.5 模型名复写（面板可配，热更新，支持正则与反向引用）
-    1. 按模型名取 profile (关键词匹配)
-    2. 图片模型走独立路径
-    3. 模型映射 + thinkingConfig (按 profile.thinking)
-    4. contents 清理 -> 预填充处理 -> Claude 专属处理 -> 工具调用 id
-    5. 工具 schema 规范化
-    6. 公共参数 (safetySettings / maxOutputTokens / topK)
+    Processing logic:
+    0. Sensitive word filtering (contents / systemInstruction, panel-configurable, hot-reload)
+    0.5 Model name rewrite (panel-configurable, hot-reload, supports regex and backreferences)
+    1. Resolve profile by model name (keyword matching)
+    2. Image models take independent path
+    3. Model mapping + thinkingConfig (by profile.thinking)
+    4. contents cleanup -> prefill handling -> Claude-specific processing -> tool call ids
+    5. Tool schema normalization
+    6. Common parameters (safetySettings / maxOutputTokens / topK)
 
     Args:
-        request: 原始请求字典 (不会被修改)
+        request: Original request dictionary (will not be mutated)
     Returns:
-        规范化后的请求
+        Normalized request
     """
     result = request.copy()
     model = result.get("model", "")
     generation_config = (result.get("generationConfig") or {}).copy()
     return_thoughts = await get_return_thoughts_to_frontend()
 
-    # ========== 0.5 模型名复写（面板可配，热更新） ==========
-    # 在抗截断前缀剥离之后、profile 解析之前应用：
-    # 命中规则的模型名被替换为规则指定的模型名（支持正则与反向引用）
+    # ========== 0.5 Model name rewrite (panel-configurable, hot-reload) ==========
+    # Applied after anti-truncation prefix stripping and before profile resolution:
+    # Matching model names are replaced with the target specified in the rule (supports regex and backreferences)
     rewrite_rules = await _get_model_rewrite_rules()
     if rewrite_rules and model:
         rewritten = rewrite_model_name(model, rewrite_rules)
         if rewritten != model:
             result["model"] = rewritten
-            print(f"[ANTIGRAVITY] 模型名复写: {model} -> {rewritten}", flush=True)
+            print(f"[ANTIGRAVITY] Model name rewrite: {model} -> {rewritten}", flush=True)
         model = rewritten
 
     profile = resolve_profile(model)
 
-    # ========== 0. 敏感词过滤 ==========
-    # 在所有内容处理之前应用：命中面板配置的敏感词（大小写不敏感）直接替换为空，
-    # 避免触发 Google API 端点的敏感词拦截
+    # ========== 0. Sensitive word filtering ==========
+    # Applied before all content processing: words matching panel-configured sensitive words (case-insensitive)
+    # are replaced with empty string to avoid triggering Google API endpoint sensitive word moderation
     sensitive_patterns = await _get_sensitive_word_patterns()
     if sensitive_patterns:
         if isinstance(result.get("contents"), list):
@@ -899,14 +899,14 @@ async def normalize_antigravity_request(
                 result.get("system_instruction"), sensitive_patterns
             )
 
-    # 图片模型走独立的图片生成处理路径
+    # Image models take independent image generation processing path
     if profile.family == "image":
         return prepare_image_generation_request(result, model)
 
     upstream = profile.upstream
     result["model"] = upstream
 
-    # ========== 1. 思考设置 ==========
+    # ========== 1. Thinking settings ==========
     _apply_thinking(profile, generation_config, return_thoughts)
 
     # ========== 2. contents ==========
@@ -916,20 +916,32 @@ async def normalize_antigravity_request(
         if profile.no_prefill:
             contents, removed = _strip_trailing_model_turns(contents)
             if removed:
-                print(f"[ANTIGRAVITY] {upstream} 禁用预填充，移除了 {removed} 条末尾 model 消息", flush=True)
+                print(f"[ANTIGRAVITY] {upstream} disables prefill, removed {removed} trailing model message(s)", flush=True)
 
         if profile.family == "claude":
             contents = _prepare_claude_history(contents, generation_config)
 
         result["contents"] = _ensure_tool_call_ids(contents, upstream)
 
-    # ========== 3. 工具 ==========
+    # ========== 3. Tools ==========
     if "tools" in result:
         tools = _normalize_tools_for_internal_api(result.get("tools"))
-        # Claude: functionDeclarations + parameters；Gemini: 只保留 parameters，避免与 parametersJsonSchema 冲突
+        # Claude: functionDeclarations + parameters; Gemini: retain only parameters to avoid conflict with parametersJsonSchema
         result["tools"] = _ensure_empty_tool_schema_for_claude(tools, upstream)
 
-    # ========== 公共处理 ==========
+    # ========== Common processing ==========
+    generation_config.pop("presencePenalty", None)
+    generation_config.pop("frequencyPenalty", None)
+    generation_config.pop("stopSequences", None)
+
+    result["safetySettings"] = DEFAULT_SAFETY_SETTINGS
+
+    if generation_config:
+        generation_config["maxOutputTokens"] = MAX_OUTPUT_TOKENS
+        generation_config["topK"] = TOP_K
+        result["generationConfig"] = generation_config
+
+    return result
     generation_config.pop("presencePenalty", None)
     generation_config.pop("frequencyPenalty", None)
     generation_config.pop("stopSequences", None)

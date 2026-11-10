@@ -1,8 +1,8 @@
 """
-请求日志服务：usage_log 表的写入与统计
-- record_usage_log: 请求完成时写入一条日志（不抛异常，不影响主流程）
-  写入先进入内存队列，由后台任务批量落库，避免在请求热路径上等待 SQLite 写锁
-- extract_usage_tokens: 从 Gemini 响应/流式块中提取 usageMetadata token 计数
+Usage logging service: persistence and statistics for the usage_log table.
+- record_usage_log: Writes a log entry upon request completion (non-throwing, non-blocking)
+  Logs enter an in-memory queue first and are flushed in batches to avoid locking SQLite
+- extract_usage_tokens: Extracts usageMetadata token counts from Gemini responses / streaming chunks
 """
 
 import asyncio
@@ -17,27 +17,27 @@ from src.storage.database import get_database
 
 
 def new_request_id() -> str:
-    """生成短请求 ID"""
+    """Generate a short request ID."""
     return uuid.uuid4().hex[:16]
 
 
-# ====================== 异步批量写入队列 ======================
+# ====================== Asynchronous Batch Write Queue ======================
 
-# 内存队列：请求热路径只做 append（O(1)），后台任务批量写库
+# In-memory queue: Request hot path only performs O(1) append, background task writes in batches
 _pending_logs: list = []
 _queue_lock = asyncio.Lock()
-# 后台批量刷新任务（应用启动后首次写入时惰性创建）
+# Background batch flush task (created lazily on first write)
 _flush_task: Optional[asyncio.Task] = None
-# 批量落库的间隔（秒）；缓冲区满时立即触发刷新
+# Interval between batch flushes (seconds); triggers immediately when buffer is full
 _FLUSH_INTERVAL = 2.0
-# 缓冲区上限（超过立即批量落库，防止异常高峰下内存增长）
+# Maximum buffer size (flushes immediately when exceeded to prevent memory growth under spikes)
 _MAX_PENDING = 500
 
 _FLUSH_LOOP_STOP = False
 
 
 async def _flush_pending_logs() -> None:
-    """将待写日志批量落库（分批事务，单条失败不影响整批）"""
+    """Flush pending logs to database in batch (transactional, individual failures do not affect batch)."""
     global _pending_logs
     async with _queue_lock:
         batch = _pending_logs
@@ -50,73 +50,73 @@ async def _flush_pending_logs() -> None:
         try:
             await database.insert_usage_log(entry)
         except Exception as e:
-            log.debug(f"请求日志写入失败（不影响主流程）: {e}")
+            log.debug(f"Failed to write usage log (non-fatal): {e}")
 
 
 async def _flush_loop() -> None:
-    """后台定时批量落库循环"""
+    """Background periodic batch flush loop."""
     while True:
         await asyncio.sleep(_FLUSH_INTERVAL)
         try:
             await _flush_pending_logs()
         except Exception as e:
-            log.debug(f"请求日志批量落库异常: {e}")
+            log.debug(f"Exception during usage log batch flush: {e}")
 
 
 def _ensure_flush_loop() -> None:
-    """确保后台刷新任务存在（惰性启动，随事件循环生命周期）"""
+    """Ensure background flush task is active (lazy startup, attached to event loop lifecycle)."""
     global _flush_task
     if _flush_task is None or _flush_task.done():
         _flush_task = asyncio.get_event_loop().create_task(_flush_loop())
 
 
 async def flush_usage_logs() -> None:
-    """立即落库所有待写日志（应用关闭时调用，避免丢日志）"""
+    """Immediately flush all pending logs to database (called on shutdown to avoid data loss)."""
     await _flush_pending_logs()
 
 
 def _enqueue_log(entry: Dict[str, Any]) -> None:
-    """入队一条日志；缓冲区超限时同步触发一次批量落库"""
+    """Enqueue a log entry; triggers batch flush if buffer limit is reached."""
     global _pending_logs
     _pending_logs.append(entry)
     if len(_pending_logs) >= _MAX_PENDING:
         try:
-            # 已在事件循环内：调度立即刷新（不阻塞请求）
+            # Already inside event loop: schedule immediate flush (non-blocking)
             asyncio.get_event_loop().create_task(_flush_pending_logs())
         except Exception:
             pass
 
 
 async def _write_log(entry: Dict[str, Any]) -> None:
-    """日志写入入口：开关校验后进入批量队列"""
+    """Log write entry point: enters batch queue after checking configuration toggle."""
     try:
         if not await config.get_usage_log_enabled():
             return
         _ensure_flush_loop()
         _enqueue_log({**entry, "created_at": entry.get("created_at") or time.time()})
     except Exception as e:
-        log.debug(f"请求日志入队失败（不影响主流程）: {e}")
+        log.debug(f"Failed to enqueue usage log (non-fatal): {e}")
 
 
 def extract_usage_tokens(source: Any) -> Dict[str, int]:
     """
-    从 Gemini 响应结构中提取 token 用量。
+    Extract token usage metrics from Gemini response structures.
 
-    兼容:
-    - 非流式: {"usageMetadata": {...}} 或 {"response": {"usageMetadata": {...}}}
-    - 流式块: data 字符串内的 usageMetadata（通常只在最后一个块出现）
+    Compatible with:
+    - Non-streaming: {"usageMetadata": {...}} or {"response": {"usageMetadata": {...}}}
+    - Streaming chunks: usageMetadata inside SSE data string (usually present in final chunk)
 
-    Gemini 语义（与 PR#432 对齐）:
-    - promptTokenCount 含缓存 token（cachedContentTokenCount）
+    Gemini semantics:
+    - promptTokenCount includes cached content (cachedContentTokenCount)
     - completion = candidatesTokenCount + thoughtsTokenCount
 
-    同时兼容 v1internal 新版 Interactions 格式（对齐 Antigravity-Manager CanonicalUsage::from_gemini）:
+    Also compatible with newer Interactions format:
     - total_input_tokens / total_output_tokens / total_thought_tokens / total_cached_tokens
     """
     prompt_tokens = completion_tokens = total_tokens = cached_tokens = 0
 
     if isinstance(source, (str, bytes)):
-        # 流式 SSE 块：解析 JSON 提取 usageMetadata
+        # Streaming SSE chunk: parse JSON to extract usageMetadata
         try:
             text = source.decode("utf-8") if isinstance(source, bytes) else source
             if text.startswith("data: "):
@@ -132,7 +132,7 @@ def extract_usage_tokens(source: Any) -> Dict[str, int]:
 
     metadata = source.get("usageMetadata")
     if not isinstance(metadata, dict):
-        # 展开包装: {"response": {...}}
+        # Unwrap outer {"response": {...}} wrapper if present
         response = source.get("response")
         if isinstance(response, dict):
             metadata = response.get("usageMetadata")
@@ -155,7 +155,7 @@ def extract_usage_tokens(source: Any) -> Dict[str, int]:
     completion_tokens = candidates_tokens + reasoning_tokens
     total_tokens = _first_int("totalTokenCount", "total_tokens") or (prompt_tokens + completion_tokens)
 
-    # 缓存命中数：旧版 cachedContentTokenCount / 新版 total_cached_tokens，及 Anthropic 风格明细
+    # Cached tokens: legacy cachedContentTokenCount / modern total_cached_tokens, and Anthropic details
     cached_tokens = _first_int(
         "cachedContentTokenCount",
         "cached_content_token_count",
@@ -185,20 +185,20 @@ def extract_usage_tokens(source: Any) -> Dict[str, int]:
 
 async def record_usage_log(entry: Dict[str, Any]) -> None:
     """
-    写入一条请求日志。任何异常仅记录告警，绝不影响主请求流程。
+    Write a request usage log entry. Non-blocking, non-fatal on errors.
 
-    日志先进内存队列由后台任务批量落库，不阻塞请求热路径。
+    Logs enter in-memory queue first for batch writing.
 
-    必要字段: model_name, success
-    可选字段: api_format, client_ip, request_id, credential_email, is_stream,
-              status_code, use_time, prompt_tokens, completion_tokens, total_tokens, cached_tokens, error_message,
-              request_log_file（请求体详细日志的磁盘文件索引，空=未记录）
+    Required fields: model_name, success
+    Optional fields: api_format, client_ip, request_id, credential_email, is_stream,
+                     status_code, use_time, prompt_tokens, completion_tokens, total_tokens, cached_tokens, error_message,
+                     request_log_file (disk relative path index, empty = none)
     """
     await _write_log(entry)
 
 
 async def clear_usage_logs(days: int) -> int:
-    """清理 N 天前的日志，返回删除条数"""
+    """Purge logs older than N days, returning deleted count."""
     await flush_usage_logs()
     database = await get_database()
     cutoff = time.time() - days * 86400

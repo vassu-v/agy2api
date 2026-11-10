@@ -35,9 +35,9 @@ export default function Credentials() {
   const [errorModal, setErrorModal] = useState(null);
   const [busyFiles, setBusyFiles] = useState(new Set());
   const [now, setNow] = useState(Date.now() / 1000);
-  // 额度预览相关状态
-  const [quotaModal, setQuotaModal] = useState(null); // { email } 额度弹窗
-  const [quotaCache, setQuotaCache] = useState({}); // 缓存额度数据 { email: { claude, gemini } | { error } }
+  
+  const [quotaModal, setQuotaModal] = useState(null); 
+  const [quotaCache, setQuotaCache] = useState({}); 
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now() / 1000), 1000);
@@ -63,7 +63,7 @@ export default function Credentials() {
       setStats(res.data.stats || { total: 0, normal: 0, disabled: 0 });
       setSelected(new Set());
     } catch (err) {
-      showMessage("error", err.response?.data?.detail || "加载凭证失败");
+      showMessage("error", err.response?.data?.detail || "Failed to load credentials");
     } finally {
       setLoading(false);
     }
@@ -74,7 +74,7 @@ export default function Credentials() {
   }, [fetchCreds]);
 
   const showMessage = useCallback((type, text, title) => {
-    setMessage({ type, text, title: title || (type === "success" ? "操作成功" : type === "error" ? "操作失败" : "提示") });
+    setMessage({ type, text, title: title || (type === "success" ? "Success" : type === "error" ? "Operation Failed" : "Notice") });
   }, []);
 
   const setBusy = (email, busy) => {
@@ -93,7 +93,7 @@ export default function Credentials() {
       showMessage("success", res.data.message);
       fetchCreds();
     } catch (err) {
-      showMessage("error", err.response?.data?.detail || "操作失败");
+      showMessage("error", err.response?.data?.detail || "Operation Failed");
     } finally {
       setBusy(email, false);
     }
@@ -110,7 +110,7 @@ export default function Credentials() {
       showMessage(res.data.errors?.length ? "error" : "success", res.data.message);
       fetchCreds();
     } catch (err) {
-      showMessage("error", err.response?.data?.detail || "批量操作失败");
+      showMessage("error", err.response?.data?.detail || "Batch operation failed");
     } finally {
       setBusy("__batch__", false);
     }
@@ -124,17 +124,17 @@ export default function Credentials() {
         showMessage(
           "success",
           `Project=${res.data.project_id}, Tier=${res.data.subscription_tier}`,
-          `检验成功: ${email}`
+          `Verification Successful: ${email}`
         );
       } else {
-        showMessage("error", res.data.message || res.data.error || "检验失败", `检验失败: ${email}`);
+        showMessage("error", res.data.message || res.data.error || "Verification Failed", `Verification Failed: ${email}`);
       }
       fetchCreds();
     } catch (err) {
       showMessage(
         "error",
-        err.response?.data?.detail || err.response?.data?.error || err.response?.data?.message || "检验失败",
-        `检验失败: ${email}`
+        err.response?.data?.detail || err.response?.data?.error || err.response?.data?.message || "Verification Failed",
+        `Verification Failed: ${email}`
       );
     } finally {
       setBusy(email, false);
@@ -145,22 +145,22 @@ export default function Credentials() {
     setBusy(email, true);
     try {
       const res = await api.post(`/creds/test/${encodeURIComponent(email)}`);
-      // 200 = 可用；429 = 限流但有效
+      
       showMessage(
         "success",
-        res.data.message || (res.status === 429 ? "凭证被限流（429）但有效" : "凭证测试通过"),
-        `测试成功: ${email}`
+        res.data.message || (res.status === 429 ? "Credential rate-limited (429) but valid" : "Credential test passed"),
+        `Test Successful: ${email}`
       );
       fetchCreds();
     } catch (err) {
       const data = err.response?.data || {};
       const status = err.response?.status;
-      // 透明透传上游错误：优先后端返回的 error 原文
-      const upstreamError = data.error || data.detail || data.message || "测试失败";
+      
+      const upstreamError = data.error || data.detail || data.message || "Test Failed";
       showMessage(
         status === 429 ? "info" : "error",
         `HTTP ${status}\n${upstreamError}`,
-        `测试失败: ${email}`
+        `Test Failed: ${email}`
       );
       fetchCreds();
     } finally {
@@ -168,7 +168,7 @@ export default function Credentials() {
     }
   };
 
-  // 额度弹窗：打开并强制刷新（不使用旧缓存）
+  
   const openQuotaModal = async (email) => {
     setQuotaModal({ email });
     setBusy(email, true);
@@ -178,19 +178,19 @@ export default function Credentials() {
         const aggregated = aggregateQuota(res.data.quotaGroups || []);
         setQuotaCache((prev) => ({ ...prev, [email]: aggregated }));
       } else {
-        setQuotaCache((prev) => ({ ...prev, [email]: { error: res.data.error || "获取额度失败" } }));
+        setQuotaCache((prev) => ({ ...prev, [email]: { error: res.data.error || "Failed to fetch quota" } }));
       }
     } catch (err) {
       setQuotaCache((prev) => ({
         ...prev,
-        [email]: { error: err.response?.data?.detail || err.response?.data?.error || "获取额度失败" },
+        [email]: { error: err.response?.data?.detail || err.response?.data?.error || "Failed to fetch quota" },
       }));
     } finally {
       setBusy(email, false);
     }
   };
 
-  // 聚合额度分组 -> Claude / Gemini 各自的剩余百分比（多组取平均，组内取 weekly/5h 较小值）
+  
   const aggregateQuota = (groups) => {
     const result = {
       claude: { remaining: 0, count: 0, resetTime: "" },
@@ -202,7 +202,7 @@ export default function Credentials() {
       const target = name.includes("claude") ? result.claude : result.gemini;
       target.count += 1;
 
-      // 每组取 weekly / 5h 中较小的 remainingFraction（短板效应）
+      
       let minPct = null;
       let minResetTime = "";
       (group.buckets || []).forEach((bucket) => {
@@ -225,7 +225,7 @@ export default function Credentials() {
       }
     });
 
-    // 多组时取平均值
+    
     if (result.claude.count > 1)
       result.claude.remaining = Math.round(result.claude.remaining / result.claude.count);
     if (result.gemini.count > 1)
@@ -234,7 +234,7 @@ export default function Credentials() {
     return result;
   };
 
-  // 额度进度条颜色
+  
   const getQuotaColor = (remaining) => {
     if (remaining >= 80) return { bar: "bg-green-500", text: "text-green-400" };
     if (remaining >= 40) return { bar: "bg-yellow-500", text: "text-yellow-400" };
@@ -253,9 +253,9 @@ export default function Credentials() {
       a.download = `${email}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      showMessage("success", `已导出 ${email}.json`);
+      showMessage("success", `Exported ${email}.json`);
     } catch (err) {
-      showMessage("error", err.response?.data?.detail || "导出失败");
+      showMessage("error", err.response?.data?.detail || "Export failed");
     }
   };
 
@@ -272,7 +272,7 @@ export default function Credentials() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      showMessage("error", err.response?.data?.detail || "下载失败");
+      showMessage("error", err.response?.data?.detail || "Download failed");
     } finally {
       setBusy("__batch__", false);
     }
@@ -283,7 +283,7 @@ export default function Credentials() {
       const res = await api.get(`/creds/errors/${encodeURIComponent(email)}`);
       setErrorModal(res.data);
     } catch (err) {
-      showMessage("error", err.response?.data?.detail || "获取错误信息失败");
+      showMessage("error", err.response?.data?.detail || "Failed to fetch error details");
     }
   };
 
@@ -330,7 +330,7 @@ export default function Credentials() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* 消息弹窗 */}
+      {}
       {message && (
         <Modal
           type={message.type}
@@ -341,23 +341,23 @@ export default function Credentials() {
         </Modal>
       )}
 
-      {/* 状态统计 */}
+      {}
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <div className="bg-dark-800 border border-dark-600 rounded-xl p-3 sm:p-4 text-center">
           <div className="text-xl sm:text-2xl font-bold text-white">{stats.total}</div>
-          <div className="text-xs text-gray-500 mt-0.5">总计</div>
+          <div className="text-xs text-gray-500 mt-0.5">Total</div>
         </div>
         <div className="bg-emerald-900/20 border border-emerald-700/30 rounded-xl p-3 sm:p-4 text-center">
           <div className="text-xl sm:text-2xl font-bold text-emerald-400">{stats.normal}</div>
-          <div className="text-xs text-gray-500 mt-0.5">正常</div>
+          <div className="text-xs text-gray-500 mt-0.5">Active</div>
         </div>
         <div className="bg-red-900/20 border border-red-700/30 rounded-xl p-3 sm:p-4 text-center">
           <div className="text-xl sm:text-2xl font-bold text-red-400">{stats.disabled}</div>
-          <div className="text-xs text-gray-500 mt-0.5">禁用</div>
+          <div className="text-xs text-gray-500 mt-0.5">Disabled</div>
         </div>
       </div>
 
-      {/* 操作按钮 */}
+      {}
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={fetchCreds}
@@ -365,7 +365,7 @@ export default function Credentials() {
           className="btn btn-secondary text-xs sm:text-sm px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-1.5"
         >
           <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
-          刷新状态
+          Refresh Status
         </button>
         <button
           onClick={downloadAll}
@@ -373,11 +373,11 @@ export default function Credentials() {
           className="btn btn-secondary text-xs sm:text-sm px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-1.5"
         >
           <Download size={15} />
-          打包导出
+          Export All (ZIP)
         </button>
       </div>
 
-      {/* 筛选器 */}
+      {}
       <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-3 text-sm">
         <Select
           value={statusFilter}
@@ -387,9 +387,9 @@ export default function Credentials() {
           }}
           className="w-full sm:w-32"
           options={[
-            { value: "all", label: "全部凭证" },
-            { value: "enabled", label: "仅启用" },
-            { value: "disabled", label: "仅禁用" },
+            { value: "all", label: "All Credentials" },
+            { value: "enabled", label: "Enabled Only" },
+            { value: "disabled", label: "Disabled Only" },
           ]}
         />
         <Select
@@ -400,8 +400,8 @@ export default function Credentials() {
           }}
           className="w-full sm:w-32"
           options={[
-            { value: "all", label: "错误码: 全部" },
-            { value: "none", label: "无错误" },
+            { value: "all", label: "Error Code: All" },
+            { value: "none", label: "No Errors" },
             { value: "400", label: "400" },
             { value: "403", label: "403" },
             { value: "429", label: "429" },
@@ -416,9 +416,9 @@ export default function Credentials() {
           }}
           className="w-full sm:w-32"
           options={[
-            { value: "all", label: "冷却: 全部" },
-            { value: "in_cooldown", label: "CD中" },
-            { value: "no_cooldown", label: "未CD" },
+            { value: "all", label: "Cooldown: All" },
+            { value: "in_cooldown", label: "In Cooldown" },
+            { value: "no_cooldown", label: "No Cooldown" },
           ]}
         />
         <Select
@@ -429,7 +429,7 @@ export default function Credentials() {
           }}
           className="w-full sm:w-32"
           options={[
-            { value: "all", label: "Tier: 全部" },
+            { value: "all", label: "Tier: All" },
             { value: "free", label: "Free" },
             { value: "pro", label: "Pro" },
             { value: "ultra", label: "Ultra" },
@@ -444,58 +444,19 @@ export default function Credentials() {
           className="w-full sm:w-32"
           options={[20, 50, 100, 200, 500, 1000].map((n) => ({
             value: n,
-            label: `每页 ${n}`,
+            label: `per page ${n}`,
           }))}
         />
       </div>
 
-      {/* 批量操作 */}
-      <div className="card p-3 sm:p-4">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-          <label className="flex items-center gap-2 text-gray-400 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={selected.size === items.length && items.length > 0}
-              onChange={toggleSelectAll}
-              className="accent-purple-600 w-4 h-4"
-            />
-            全选
-          </label>
-          <span className="text-gray-500 text-xs">已选 {selected.size} 项</span>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => doBatchAction("enable")}
-              disabled={selected.size === 0 || busyFiles.has("__batch__")}
-              className="btn btn-secondary text-xs px-3 py-1.5 disabled:opacity-40"
-            >
-              批量启用
-            </button>
-            <button
-              onClick={() => doBatchAction("disable")}
-              disabled={selected.size === 0 || busyFiles.has("__batch__")}
-              className="btn btn-secondary text-xs px-3 py-1.5 disabled:opacity-40"
-            >
-              批量禁用
-            </button>
-            <button
-              onClick={() => doBatchAction("delete")}
-              disabled={selected.size === 0 || busyFiles.has("__batch__")}
-              className="btn btn-danger text-xs px-3 py-1.5 disabled:opacity-40"
-            >
-              批量删除
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 凭证卡片列表 */}
+      {}
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="animate-spin text-purple-500" size={28} />
         </div>
       ) : items.length === 0 ? (
         <div className="card text-center py-12 text-gray-500 text-sm">
-          没有凭证。请先通过 OAuth 认证或批量导入添加凭证。
+          No credentials found. Please authenticate via OAuth or use Batch Import.
         </div>
       ) : (
         <div className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
@@ -509,7 +470,7 @@ export default function Credentials() {
                   cred.disabled ? "border-red-500/30" : ""
                 }`}
               >
-                {/* 头部：选择框 + 邮箱 + 状态标签 */}
+                {}
                 <div className="flex items-start gap-2.5">
                   <input
                     type="checkbox"
@@ -529,18 +490,18 @@ export default function Credentials() {
                       </span>
                       {cred.disabled ? (
                         <span className="text-red-400 text-xs flex items-center gap-1">
-                          <Ban size={12} /> 禁用
+                          <Ban size={12} /> Disabled
                         </span>
                       ) : (
                         <span className="text-emerald-400 text-xs flex items-center gap-1">
-                          <CheckCircle size={12} /> 启用
+                          <CheckCircle size={12} /> Enable
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* 信息区 */}
+                {}
                 <div className="space-y-1 text-xs">
                   <div className="flex items-center justify-between gap-2">
                     {cooldownText ? (
@@ -549,7 +510,7 @@ export default function Credentials() {
                       </span>
                     ) : (
                       <span className="text-gray-600 flex items-center gap-1">
-                        <Clock size={12} /> 无CD
+                        <Clock size={12} /> No Cooldown
                       </span>
                     )}
                     {cred.error_codes?.length ? (
@@ -562,7 +523,7 @@ export default function Credentials() {
                       </button>
                     ) : (
                       <span className="text-gray-600 flex items-center gap-1">
-                        <CheckCircle size={12} /> 无错误
+                        <CheckCircle size={12} /> No Errors
                       </span>
                     )}
                   </div>
@@ -574,7 +535,7 @@ export default function Credentials() {
                   </div>
                 </div>
 
-                {/* 操作按钮（2×3 网格铺满卡片） */}
+                {}
                 <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-dark-700">
                   {busy ? (
                     <div className="col-span-3 flex items-center justify-center py-1.5">
@@ -585,31 +546,31 @@ export default function Credentials() {
                       <button
                         onClick={() => verifyProject(cred.email)}
                         className="text-xs px-2 py-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 text-gray-300 flex items-center justify-center gap-1"
-                        title="检验 Project ID / Tier（可修复 403）"
+                        title="Verify Project ID / Tier (Can fix 403)"
                       >
-                        <Shield size={13} /> 检验
+                        <Shield size={13} /> Verify
                       </button>
                       <button
                         onClick={() => testCredential(cred.email)}
                         className="text-xs px-2 py-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 text-gray-300 flex items-center justify-center gap-1"
-                        title="测试凭证"
+                        title="Test Credential"
                       >
-                        <Zap size={13} /> 测试
+                        <Zap size={13} /> Test
                       </button>
                       <button
                         onClick={() => openQuotaModal(cred.email)}
                         disabled={cred.disabled}
                         className="text-xs px-2 py-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 text-gray-300 flex items-center justify-center gap-1 disabled:opacity-40"
-                        title="查看额度"
+                        title="View Quota"
                       >
-                        <BarChart3 size={13} /> 额度
+                        <BarChart3 size={13} /> Quota
                       </button>
                       <button
                         onClick={() => exportCredential(cred.email)}
                         className="text-xs px-2 py-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 text-gray-300 flex items-center justify-center gap-1"
-                        title="导出凭证（邮箱.json）"
+                        title="Export Credential (.json)"
                       >
-                        <Download size={13} /> 导出
+                        <Download size={13} /> Export
                       </button>
                       <button
                         onClick={() =>
@@ -622,14 +583,14 @@ export default function Credentials() {
                         }`}
                       >
                         {cred.disabled ? <CheckCircle size={13} /> : <Ban size={13} />}
-                        {cred.disabled ? "启用" : "禁用"}
+                        {cred.disabled ? "Enable" : "Disabled"}
                       </button>
                       <button
                         onClick={() => doAction(cred.email, "delete")}
                         className="text-xs px-2 py-1.5 rounded-lg bg-red-600/10 hover:bg-red-600/20 text-red-400 flex items-center justify-center gap-1"
-                        title="删除"
+                        title="Delete"
                       >
-                        <Trash2 size={13} /> 删除
+                        <Trash2 size={13} /> Delete
                       </button>
                     </>
                   )}
@@ -640,11 +601,11 @@ export default function Credentials() {
         </div>
       )}
 
-      {/* 分页 */}
+      {}
       {total > pageSize && (
         <div className="flex items-center justify-between text-sm">
           <span className="text-gray-500 text-xs sm:text-sm">
-            共 {total} 个凭证，第 {page}/{totalPages} 页
+            Total {total} credentials, page {page}/{totalPages} pages
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -652,7 +613,7 @@ export default function Credentials() {
               disabled={page <= 1}
               className="btn btn-secondary text-xs px-3 py-1.5 disabled:opacity-40"
             >
-              上一页
+              Previous
             </button>
             <span className="text-gray-400 text-xs sm:text-sm">
               {page} / {totalPages}
@@ -662,24 +623,24 @@ export default function Credentials() {
               disabled={page >= totalPages}
               className="btn btn-secondary text-xs px-3 py-1.5 disabled:opacity-40"
             >
-              下一页
+              Next
             </button>
           </div>
         </div>
       )}
 
 
-      {/* 额度弹窗 */}
+      {}
       {quotaModal && (
         <Modal
           type="info"
-          title={`额度信息 - ${quotaModal.email}`}
+          title={`Quota Details - ${quotaModal.email}`}
           onClose={() => setQuotaModal(null)}
         >
           {busyFiles.has(quotaModal.email) ? (
             <div className="flex items-center justify-center py-6 text-gray-500">
               <RefreshCw size={16} className="animate-spin mr-2" />
-              加载额度中...
+              Loading quota...
             </div>
           ) : quotaCache[quotaModal.email]?.error ? (
             <div className="text-center py-4 text-red-400">{quotaCache[quotaModal.email].error}</div>
@@ -719,12 +680,12 @@ export default function Credentials() {
               )}
               {!quotaCache[quotaModal.email].claude?.count &&
                 !quotaCache[quotaModal.email].gemini?.count && (
-                  <div className="text-center py-3 text-gray-500">暂无额度数据</div>
+                  <div className="text-center py-3 text-gray-500">No quota data found</div>
                 )}
               {(quotaCache[quotaModal.email].claude?.resetTime ||
                 quotaCache[quotaModal.email].gemini?.resetTime) && (
                 <div className="text-xs text-gray-500 text-right pt-1">
-                  重置:{" "}
+                  Reset:{" "}
                   {quotaCache[quotaModal.email].claude?.resetTime ||
                     quotaCache[quotaModal.email].gemini?.resetTime}
                 </div>
@@ -735,16 +696,16 @@ export default function Credentials() {
                 className="w-full text-xs text-gray-400 hover:text-white py-2 rounded-lg bg-dark-700 hover:bg-dark-600 flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
                 <RefreshCw size={12} className={busyFiles.has(quotaModal.email) ? "animate-spin" : ""} />
-                刷新额度
+                Refresh Quota
               </button>
             </div>
           ) : (
-            <div className="text-center py-4 text-gray-500">加载中...</div>
+            <div className="text-center py-4 text-gray-500">Loading...</div>
           )}
         </Modal>
       )}
 
-      {/* 错误详情弹窗 */}
+      {}
       {errorModal && (
         <div
           className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50"
@@ -757,7 +718,7 @@ export default function Credentials() {
             <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-dark-700">
               <h3 className="font-semibold flex items-center gap-2 text-sm sm:text-base break-all">
                 <AlertCircle size={16} className="text-red-400 flex-shrink-0" />
-                错误详情 - {errorModal.email}
+                Error Details - {errorModal.email}
               </h3>
               <button
                 onClick={() => setErrorModal(null)}
@@ -768,13 +729,13 @@ export default function Credentials() {
             </div>
             <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
               <div>
-                <div className="text-sm text-gray-400 mb-1">错误码</div>
+                <div className="text-sm text-gray-400 mb-1">Error Codes</div>
                 <div className="text-red-400 text-sm">
-                  {(errorModal.error_codes || []).join(", ") || "无"}
+                  {(errorModal.error_codes || []).join(", ") || "None"}
                 </div>
               </div>
               <div>
-                <div className="text-sm text-gray-400 mb-1">错误信息</div>
+                <div className="text-sm text-gray-400 mb-1">Error Details</div>
                 <pre className="bg-dark-800 border border-dark-600 rounded-lg p-3 sm:p-4 text-xs text-gray-300 overflow-auto max-h-56 whitespace-pre-wrap">
                   {JSON.stringify(errorModal.error_messages, null, 2)}
                 </pre>
@@ -787,7 +748,7 @@ export default function Credentials() {
                   }}
                   className="btn btn-primary text-sm"
                 >
-                  检验修复（重新获取Project ID）
+                  Verify & Fix (Refresh Project ID)
                 </button>
                 <button
                   onClick={() => {
@@ -796,7 +757,7 @@ export default function Credentials() {
                   }}
                   className="btn btn-secondary text-sm"
                 >
-                  测试凭证
+                  Test Credential
                 </button>
               </div>
             </div>

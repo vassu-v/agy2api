@@ -7,18 +7,18 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      # 密码配置（分离密码）
+      # Password configuration (separated passwords)
       - API_PASSWORD=${API_PASSWORD:-your_api_password}
       - PANEL_PASSWORD=${PANEL_PASSWORD:-your_panel_password}
 
-      # 服务器配置
+      # Server configuration
       - PORT=${PORT:-7861}
       - HOST=${HOST:-0.0.0.0}
 
-      # 可选: PostgreSQL 配置 (分布式存储)
+      # Optional: PostgreSQL configuration (distributed storage)
       # - POSTGRESQL_URI=${POSTGRESQL_URI}
 
-      # 可选: 代理配置
+      # Optional: Proxy configuration
       # - PROXY=${PROXY}
     volumes:
       - ./data/creds:/app/creds

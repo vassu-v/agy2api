@@ -1,14 +1,14 @@
 """
-thoughtSignature 处理公共模块
+thoughtSignature common processing module.
 
-提供统一的 thoughtSignature 编码/解码功能，用于在工具调用ID中保留签名信息。
-这使得签名能够在客户端往返传输中保留，即使客户端会删除自定义字段。
+Provides unified thoughtSignature encoding/decoding functionality to preserve signature information
+within tool call IDs. This allows signatures to persist across client round-trips even if clients drop custom fields.
 """
 
 from typing import Any, Mapping, Optional, Tuple
 
-# 在工具调用ID中嵌入thoughtSignature的分隔符
-# 这使得签名能够在客户端往返传输中保留，即使客户端会删除自定义字段
+# Separator for embedding thoughtSignature within tool call IDs
+# This allows signatures to persist across client round-trips even if clients drop custom fields
 THOUGHT_SIGNATURE_SEPARATOR = "__thought__"
 SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 SKIP_THOUGHT_SIGNATURE_PLACEHOLDER_TEXT = "..."
@@ -33,14 +33,14 @@ def is_skip_thought_signature_placeholder(part: Mapping[str, Any]) -> bool:
 
 def encode_tool_id_with_signature(tool_id: str, signature: Optional[str]) -> str:
     """
-    将 thoughtSignature 编码到工具调用ID中，以便往返保留。
+    Encode thoughtSignature into the tool call ID for round-trip preservation.
 
     Args:
-        tool_id: 原始工具调用ID
-        signature: thoughtSignature（可选）
+        tool_id: Original tool call ID
+        signature: thoughtSignature (optional)
 
     Returns:
-        编码后的工具调用ID
+        Encoded tool call ID
 
     Examples:
         >>> encode_tool_id_with_signature("call_123", "abc")
@@ -55,13 +55,13 @@ def encode_tool_id_with_signature(tool_id: str, signature: Optional[str]) -> str
 
 def decode_tool_id_and_signature(encoded_id: str) -> Tuple[str, Optional[str]]:
     """
-    从编码的ID中提取原始工具ID和thoughtSignature。
+    Extract original tool ID and thoughtSignature from encoded ID.
 
     Args:
-        encoded_id: 编码的工具调用ID
+        encoded_id: Encoded tool call ID
 
     Returns:
-        (原始工具ID, thoughtSignature) 元组
+        (original_tool_id, thoughtSignature) tuple
 
     Examples:
         >>> decode_tool_id_and_signature("call_123__thought__abc")

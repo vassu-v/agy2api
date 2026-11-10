@@ -1,5 +1,5 @@
 """
-API 客户端共用基础功能：自动封禁、错误重试、调用结果记录、冷却解析
+Shared base utilities for API clients: auto-ban, error retries, API call result recording, cooldown parsing.
 """
 
 import asyncio
@@ -20,10 +20,10 @@ from log import log
 from src.credential_manager import record_api_call_result, set_cred_disabled
 
 
-# ==================== 错误检查与处理 ====================
+# ==================== Error Checking and Handling ====================
 
 async def check_should_auto_ban(status_code: int) -> bool:
-    """检查是否应该触发自动封禁"""
+    """Check whether auto-ban should be triggered."""
     return (
         await get_auto_ban_enabled()
         and status_code in await get_auto_ban_error_codes()
@@ -31,7 +31,7 @@ async def check_should_auto_ban(status_code: int) -> bool:
 
 
 async def handle_auto_ban(status_code: int, email: str) -> None:
-    """处理自动封禁：直接禁用凭证"""
+    """Handle auto-ban: directly disable the credential."""
     if email:
         log.warning(f"[AUTO_BAN] Status {status_code} triggers auto-ban for credential: {email}")
         await set_cred_disabled(email, True)
@@ -46,22 +46,22 @@ async def handle_error_with_retry(
     retry_interval: float,
 ) -> bool:
     """
-    统一处理错误和重试逻辑
+    Unified error and retry handling logic.
 
-    仅在以下情况下进行自动重试:
-    1. 429错误(速率限制)
-    2. 503错误(服务不可用)
-    3. 500错误(服务临时不可用)
-    4. 导致凭证封禁的错误(AUTO_BAN_ERROR_CODES配置)
+    Automatic retries only occur under the following conditions:
+    1. 429 error (rate limit)
+    2. 503 error (service unavailable)
+    3. 500 error (temporary service error)
+    4. Errors causing credential auto-ban (configured in AUTO_BAN_ERROR_CODES)
 
     Returns:
-        bool: True表示需要继续重试，False表示不需要重试
+        bool: True if retry should continue, False otherwise.
     """
-    # 优先检查自动封禁
+    # Check auto-ban first
     if await check_should_auto_ban(status_code):
         await handle_auto_ban(status_code, email)
 
-        # 自动封禁后，仍然尝试重试（会在下次循环中自动获取新凭证）
+        # After auto-ban, still attempt to retry (will fetch a new credential on the next iteration)
         if retry_enabled and attempt < max_retries:
             log.info(
                 f"[RETRY] Retrying with next credential after auto-ban "
@@ -71,7 +71,7 @@ async def handle_error_with_retry(
             return True
         return False
 
-    # 如果不触发自动封禁，仅对429、503和500错误进行重试
+    # If not triggering auto-ban, only retry for 429, 503, and 500 errors
     if status_code in (429, 500, 503) and retry_enabled and attempt < max_retries:
         log.info(
             f"[RETRY] {status_code} error encountered, retrying "
@@ -83,10 +83,10 @@ async def handle_error_with_retry(
     return False
 
 
-# ==================== 重试配置获取 ====================
+# ==================== Retry Configuration Retrieval ====================
 
 async def get_retry_config() -> Dict[str, Any]:
-    """获取重试配置"""
+    """Get retry configuration."""
     return {
         "retry_enabled": await get_retry_429_enabled(),
         "max_retries": await get_retry_429_max_retries(),
@@ -94,13 +94,13 @@ async def get_retry_config() -> Dict[str, Any]:
     }
 
 
-# ==================== API调用结果记录 ====================
+# ==================== API Call Result Recording ====================
 
 async def record_api_call_success(
     email: str,
     model_name: Optional[str] = None,
 ) -> None:
-    """记录API调用成功"""
+    """Record successful API call."""
     if email:
         await record_api_call_result(
             email, True, model_name=model_name
@@ -114,7 +114,7 @@ async def record_api_call_error(
     model_name: Optional[str] = None,
     error_message: Optional[str] = None,
 ) -> None:
-    """记录API调用错误"""
+    """Record API call error."""
     if email:
         await record_api_call_result(
             email,
@@ -126,21 +126,21 @@ async def record_api_call_error(
         )
 
 
-# ==================== 429错误处理 ====================
+# ==================== 429 Error Handling ====================
 
 async def parse_and_log_cooldown(error_text: str) -> Optional[float]:
     """
-    解析并记录冷却时间
+    Parse and log cooldown time.
 
     Returns:
-        冷却截止时间（Unix时间戳），解析失败返回None
+        Cooldown end time (Unix timestamp), or None if parsing fails.
     """
     try:
         error_data = json.loads(error_text)
         cooldown_until = parse_quota_reset_timestamp(error_data)
         if cooldown_until:
             log.info(
-                f"检测到quota冷却时间: "
+                f"Detected quota cooldown time: "
                 f"{datetime.fromtimestamp(cooldown_until, timezone.utc).isoformat()}"
             )
             return cooldown_until
@@ -151,12 +151,12 @@ async def parse_and_log_cooldown(error_text: str) -> Optional[float]:
 
 def parse_quota_reset_timestamp(error_response: dict) -> Optional[float]:
     """
-    从 Antigravity API 429 错误响应中提取quota重置时间戳
+    Extract quota reset timestamp from Antigravity API 429 error response.
 
-    解析优先级：
-    1. ErrorInfo.metadata.quotaResetTimeStamp（绝对时间戳，最精确）
-    2. ErrorInfo.metadata.quotaResetDelay（相对时长，如 "154h21m14.468080073s"）
-    3. RetryInfo.retryDelay（纯秒数，如 "555674.468080073s"）
+    Parsing priority:
+    1. ErrorInfo.metadata.quotaResetTimeStamp (absolute timestamp, most accurate)
+    2. ErrorInfo.metadata.quotaResetDelay (relative duration, e.g., "154h21m14.468080073s")
+    3. RetryInfo.retryDelay (duration in seconds, e.g., "555674.468080073s")
     """
     try:
         error_obj = error_response.get("error", {})
@@ -174,7 +174,7 @@ def parse_quota_reset_timestamp(error_response: dict) -> Optional[float]:
 
         unit_to_seconds = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 
-        # 优先级1: quotaResetTimeStamp（绝对时间戳）
+        # Priority 1: quotaResetTimeStamp (absolute timestamp)
         if error_info_metadata:
             reset_timestamp_str = error_info_metadata.get("quotaResetTimeStamp")
             if reset_timestamp_str:
@@ -187,7 +187,7 @@ def parse_quota_reset_timestamp(error_response: dict) -> Optional[float]:
 
                 return reset_dt.astimezone(timezone.utc).timestamp()
 
-        # 优先级2: quotaResetDelay（相对时长，支持小数秒）
+        # Priority 2: quotaResetDelay (relative duration, supports fractional seconds)
         if error_info_metadata:
             reset_delay_str = error_info_metadata.get("quotaResetDelay")
             if reset_delay_str:
@@ -199,7 +199,7 @@ def parse_quota_reset_timestamp(error_response: dict) -> Optional[float]:
                     if cooldown_seconds > 0:
                         return time.time() + cooldown_seconds
 
-        # 优先级3: RetryInfo.retryDelay（纯秒数）
+        # Priority 3: RetryInfo.retryDelay (pure seconds)
         if retry_delay_str:
             parts = re.findall(r"(\d+(?:\.\d+)?)([smhd])", retry_delay_str)
             if parts:

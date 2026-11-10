@@ -1,10 +1,10 @@
-echo "强制同步项目代码，忽略本地修改..."
+echo "Force syncing project code, discarding local changes..."
 git fetch --all
 git reset --hard origin/$(git rev-parse --abbrev-ref HEAD)
-echo "创建虚拟环境..."
+echo "Creating virtual environment..."
 PYTHON_VERSION=$(python -V 2>&1 | grep -oP '\d+\.\d+' | head -1)
 if [ -n "$PYTHON_VERSION" ]; then
-    echo "检测到 Python $PYTHON_VERSION，固定版本..."
+    echo "Detected Python $PYTHON_VERSION, pinning version..."
     uv python pin "$PYTHON_VERSION"
 fi
 uv add -r requirements.txt

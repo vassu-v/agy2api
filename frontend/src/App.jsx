@@ -49,17 +49,17 @@ export default function App() {
   }
 
   const tabs = [
-    { id: "oauth", label: "OAuth 认证", icon: Rocket },
-    { id: "credentials", label: "凭证管理", icon: KeyRound },
-    { id: "upload", label: "批量导入", icon: Upload },
-    { id: "usage-logs", label: "请求日志", icon: BarChart3 },
-    { id: "config", label: "配置管理", icon: Settings },
-    { id: "about", label: "项目信息", icon: Info },
+    { id: "oauth", label: "OAuth Login", icon: Rocket },
+    { id: "credentials", label: "Credentials", icon: KeyRound },
+    { id: "upload", label: "Batch Import", icon: Upload },
+    { id: "usage-logs", label: "Request Logs", icon: BarChart3 },
+    { id: "config", label: "Settings", icon: Settings },
+    { id: "about", label: "About", icon: Info },
   ];
 
   return (
     <div className="min-h-screen">
-      {/* 导航栏 */}
+      {/* Navigation Bar */}
       <nav className="bg-dark-900 border-b border-dark-700 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -76,11 +76,11 @@ export default function App() {
               className="px-3 py-1.5 sm:px-4 sm:py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-1 sm:gap-2 text-sm"
             >
               <LogOut size={16} />
-              <span className="hidden sm:inline">退出登录</span>
+              <span className="hidden sm:inline">Sign Out</span>
             </button>
           </div>
 
-          {/* Tab 导航 */}
+          {/* Tab Navigation */}
           <div className="flex items-center gap-1 sm:gap-2 mt-4 overflow-x-auto pb-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;

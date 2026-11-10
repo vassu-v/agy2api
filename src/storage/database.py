@@ -1,7 +1,7 @@
 """
-数据库层（SQLAlchemy 2.0 异步 ORM）
-统一支持 SQLite（默认）与 PostgreSQL。
-凭证以 email 为唯一键；schema 变更不做旧数据兼容（新表直接重建）。
+Database layer (SQLAlchemy 2.0 async ORM)
+Uniformly supports SQLite (default) and PostgreSQL.
+Credentials use email as the unique key; schema changes do not maintain backward compatibility for old data (new tables are directly rebuilt).
 """
 
 import asyncio
@@ -31,20 +31,20 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from log import log
 
 
-# ====================== ORM 模型 ======================
+# ====================== ORM Models ======================
 
 class Base(DeclarativeBase):
     pass
 
 
 class AntigravityCredential(Base):
-    """Antigravity 凭证表（email 唯一键）"""
+    """Antigravity credentials table (email unique key)"""
     __tablename__ = "antigravity_credentials"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
 
-    # 凭证结构化字段
+    # Structured credential fields
     access_token: Mapped[str] = mapped_column(Text, default="")
     refresh_token: Mapped[str] = mapped_column(Text, default="")
     client_id: Mapped[str] = mapped_column(Text, default="")
@@ -52,19 +52,19 @@ class AntigravityCredential(Base):
     project_id: Mapped[str] = mapped_column(Text, default="")
     expiry: Mapped[str] = mapped_column(Text, default="")
 
-    # 状态字段
+    # Status fields
     disabled: Mapped[bool] = mapped_column(Boolean, default=False)
     error_codes: Mapped[str] = mapped_column(Text, default="[]")
     error_messages: Mapped[str] = mapped_column(Text, default="[]")
     last_success: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
-    # 模型级冷却 (JSON: {model_name: cooldown_timestamp})
+    # Model-level cooldown (JSON: {model_name: cooldown_timestamp})
     model_cooldowns: Mapped[str] = mapped_column(Text, default="{}")
 
-    # tier 状态 (free/pro/ultra)
+    # Tier status (free/pro/ultra)
     tier: Mapped[Optional[str]] = mapped_column(String(32), default="pro")
 
-    # 时间戳
+    # Timestamps
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
     updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
 
@@ -74,7 +74,7 @@ class AntigravityCredential(Base):
 
 
 class ConfigItem(Base):
-    """配置表"""
+    """Configuration table"""
     __tablename__ = "config"
 
     key: Mapped[str] = mapped_column(String(255), primary_key=True)
@@ -83,38 +83,38 @@ class ConfigItem(Base):
 
 
 class UsageLog(Base):
-    """请求日志表：每次 API 调用记录一条（成功与失败均记录）"""
+    """Request log table: records one entry per API call (both success and failure)"""
     __tablename__ = "usage_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     created_at: Mapped[float] = mapped_column(Float, default=time.time, index=True)
 
-    # 请求来源
+    # Request origin
     api_format: Mapped[str] = mapped_column(String(16), default="")        # openai / gemini / anthropic
     client_ip: Mapped[str] = mapped_column(String(64), default="")
     request_id: Mapped[str] = mapped_column(String(64), default="")
 
-    # 调用信息
-    model_name: Mapped[str] = mapped_column(String(128), default="")             # 客户端请求的模型名（原始，可能带功能前缀）
-    upstream_model_name: Mapped[str] = mapped_column(String(128), default="")   # 后端实际使用的真实模型名（映射后）
+    # Call information
+    model_name: Mapped[str] = mapped_column(String(128), default="")             # Client requested model name (original, may contain feature prefix)
+    upstream_model_name: Mapped[str] = mapped_column(String(128), default="")   # Actual upstream model name used by backend (mapped)
     credential_email: Mapped[str] = mapped_column(String(320), default="")
     is_stream: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # 结果
+    # Results
     status_code: Mapped[int] = mapped_column(Integer, default=0)
     success: Mapped[bool] = mapped_column(Boolean, default=False)
-    use_time: Mapped[float] = mapped_column(Float, default=0.0)            # 耗时（秒）
+    use_time: Mapped[float] = mapped_column(Float, default=0.0)            # Latency (seconds)
 
-    # Token 用量
+    # Token usage
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
     total_tokens: Mapped[int] = mapped_column(Integer, default=0)
-    cached_tokens: Mapped[int] = mapped_column(Integer, default=0)  # prompt 中命中缓存的 token（含在 prompt_tokens 内）
+    cached_tokens: Mapped[int] = mapped_column(Integer, default=0)  # Cached tokens hitting cache in prompt (included in prompt_tokens)
 
-    # 失败时的错误摘要
+    # Error summary on failure
     error_message: Mapped[str] = mapped_column(Text, default="")
 
-    # 请求体详细日志文件索引（data/request_logs 相对路径；空=未记录）
+    # Request body detail log file index (relative path to data/request_logs; empty=not logged)
     request_log_file: Mapped[str] = mapped_column(String(512), default="")
 
     __table_args__ = (
@@ -123,7 +123,7 @@ class UsageLog(Base):
     )
 
 
-# ====================== JSON 序列化辅助 ======================
+# ====================== JSON Serialization Helpers ======================
 
 def _dump_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
@@ -139,7 +139,7 @@ def _load_json(raw: Optional[str], default: Any) -> Any:
 
 
 def _row_to_credential_dict(row: AntigravityCredential) -> Dict[str, Any]:
-    """ORM 行 -> 凭证字典"""
+    """ORM row -> Credential dict"""
     return {
         "access_token": row.access_token or "",
         "refresh_token": row.refresh_token or "",
@@ -152,11 +152,11 @@ def _row_to_credential_dict(row: AntigravityCredential) -> Dict[str, Any]:
 
 def get_cooldown_group(model_name: str) -> str:
     """
-    模型 CD 分组：同家族模型共享一个冷却键
-    - 名字带 argon -> "argon"
-    - 名字带 gemini -> "gemini"
-    - 名字带 claude 或 gpt -> "claude_gpt"
-    - 其他 -> 原始模型名
+    Model cooldown grouping: models of the same family share a cooldown key
+    - Name contains argon -> "argon"
+    - Name contains gemini -> "gemini"
+    - Name contains claude or gpt -> "claude_gpt"
+    - Others -> original model name
     """
     lowered = (model_name or "").lower()
     if "argon" in lowered:
@@ -168,10 +168,10 @@ def get_cooldown_group(model_name: str) -> str:
     return model_name
 
 
-# ====================== 数据库管理器 ======================
+# ====================== Database Manager ======================
 
 class Database:
-    """统一数据库管理器（SQLite / PostgreSQL）"""
+    """Unified database manager (SQLite / PostgreSQL)"""
 
     def __init__(self):
         self._engine: Optional[AsyncEngine] = None
@@ -180,11 +180,11 @@ class Database:
         self._lock = asyncio.Lock()
         self._backend_type = "sqlite"
 
-        # 内存配置缓存
+        # In-memory config cache
         self._config_cache: Dict[str, Any] = {}
         self._config_loaded = False
 
-    # ---------- 初始化 ----------
+    # ---------- Initialization ----------
 
     async def initialize(self) -> None:
         if self._initialized:
@@ -199,7 +199,7 @@ class Database:
             os.makedirs(credentials_dir, exist_ok=True)
 
             if postgres_uri:
-                # PostgreSQL（postgres:// 或 postgresql:// -> postgresql+asyncpg://）
+                # PostgreSQL (postgres:// or postgresql:// -> postgresql+asyncpg://)
                 dsn = postgres_uri
                 if dsn.startswith("postgresql://"):
                     dsn = "postgresql+asyncpg://" + dsn[len("postgresql://"):]
@@ -210,18 +210,18 @@ class Database:
                 self._engine = create_async_engine(dsn, pool_size=5, max_overflow=5, pool_pre_ping=True)
                 self._backend_type = "postgresql"
             else:
-                # SQLite 默认
+                # SQLite default
                 db_path = os.path.join(credentials_dir, "credentials.db")
                 self._engine = create_async_engine(
                     f"sqlite+aiosqlite:///{db_path}",
-                    # 连接池：多个长连接复用（默认 NullPool 每会话新建连接开销大）；
-                    # WAL 模式允许读写并发，单写者由 busy_timeout 兜底
+                    # Connection pool: reuse multiple persistent connections (default NullPool has high per-session overhead);
+                    # WAL mode allows concurrent read/write; single writer handled by busy_timeout fallback
                     pool_size=5,
                     max_overflow=10,
                     pool_pre_ping=True,
                     connect_args={"timeout": 30},
                 )
-                # WAL + NORMAL：读写并发 + 减少每次提交的 fsync（PRAGMA 需在连接建立后执行）
+                # WAL + NORMAL: read/write concurrency + reduce fsync on each commit (PRAGMA must be executed after connection established)
                 from sqlalchemy import event
 
                 @event.listens_for(self._engine.sync_engine, "connect")
@@ -239,33 +239,33 @@ class Database:
                 self._engine, expire_on_commit=False, class_=AsyncSession
             )
 
-            # 建表（不兼容旧结构：旧的 filename 键结构表会被重建为 email 键结构）
+            # Create tables (not backward-compatible with old schema: old tables with filename key will be rebuilt with email key)
             async with self._engine.begin() as conn:
                 await conn.run_sync(self._create_tables)
 
-            # 标记初始化完成（供 session() 使用），再加载配置缓存
+            # Mark initialization complete (for session() usage), then load config cache
             self._initialized = True
 
-            # 加载配置缓存
+            # Load config cache
             await self._load_config_cache()
 
             log.info(f"Database initialized (backend={self._backend_type})")
 
     def _create_tables(self, sync_conn) -> None:
-        """建表。
-        - 凭证表：结构性变更（键从 filename 变为 email）时删除重建
-        - 其余表：缺列时用 ALTER TABLE ADD COLUMN 补齐，保留原有数据
+        """Create tables.
+        - Credentials table: drop and rebuild on structural changes (key changed from filename to email)
+        - Other tables: add missing columns using ALTER TABLE ADD COLUMN, preserving existing data
         """
         inspector = inspect(sync_conn)
         table_name = AntigravityCredential.__tablename__
         if inspector.has_table(table_name):
             existing_columns = {c["name"] for c in inspector.get_columns(table_name)}
-            # 旧结构以 filename 为键、无 email 列 —— 删除重建（数据无法迁移）
+            # Old structure used filename as key and had no email column - drop and rebuild (data cannot be migrated)
             if "filename" in existing_columns or "email" not in existing_columns:
-                log.info("检测到旧版凭证表结构（filename 键），重建为 email 键结构")
+                log.info("Detected legacy credentials table structure (filename key), rebuilding with email key structure")
                 sync_conn.execute(text(f"DROP TABLE {table_name}"))
 
-        # 已存在的表补齐缺失列（ALTER TABLE ADD COLUMN，保留数据）
+        # Add missing columns for existing tables (ALTER TABLE ADD COLUMN, preserving data)
         for orm_model in (UsageLog,):
             table = orm_model.__table__
             if not inspector.has_table(table.name):
@@ -276,7 +276,7 @@ class Database:
                 if column.name in existing_columns:
                     continue
                 column_type = column.type.compile(dialect)
-                # 补列：有 server_default 用之；有 Python default 用字面量；否则 DEFAULT NULL
+                # Add column: use server_default if present; use literal if Python default is scalar; otherwise DEFAULT NULL
                 if column.server_default is not None:
                     default_clause = f" DEFAULT {column.server_default.arg}"
                 elif column.default is not None and column.default.is_scalar:
@@ -286,7 +286,7 @@ class Database:
                 sync_conn.execute(
                     text(f"ALTER TABLE {table.name} ADD COLUMN {column.name} {column_type}{default_clause}")
                 )
-                log.info(f"表 {table.name} 补充列 {column.name} ({column_type})")
+                log.info(f"Table {table.name} added column {column.name} ({column_type})")
 
         Base.metadata.create_all(sync_conn)
 
@@ -308,7 +308,7 @@ class Database:
 
     @asynccontextmanager
     async def session(self):
-        """获取数据库会话（自动提交/回滚）"""
+        """Get database session (auto commit/rollback)"""
         self._ensure_initialized()
         async with self._session_factory() as session:
             try:
@@ -318,12 +318,12 @@ class Database:
                 await session.rollback()
                 raise
 
-    # ---------- 凭证管理 ----------
+    # ---------- Credential Management ----------
 
     async def store_credential(
         self, email: str, credential_data: Dict[str, Any]
     ) -> bool:
-        """存储或更新凭证（以 email 为唯一键，保留状态字段）"""
+        """Store or update credential (with email as unique key, preserving status fields)"""
         async with self.session() as s:
             row = await s.scalar(
                 select(AntigravityCredential).where(AntigravityCredential.email == email)
@@ -365,7 +365,7 @@ class Database:
     async def get_credential(
         self, email: str
     ) -> Optional[Dict[str, Any]]:
-        """获取凭证数据"""
+        """Get credential data"""
         async with self.session() as s:
             row = await s.scalar(
                 select(AntigravityCredential).where(AntigravityCredential.email == email)
@@ -373,7 +373,7 @@ class Database:
             return _row_to_credential_dict(row) if row else None
 
     async def list_credentials(self) -> List[str]:
-        """列出所有凭证 email（创建顺序）"""
+        """List all credential emails (creation order)"""
         async with self.session() as s:
             rows = await s.scalars(
                 select(AntigravityCredential.email).order_by(AntigravityCredential.id)
@@ -381,7 +381,7 @@ class Database:
             return list(rows)
 
     async def delete_credential(self, email: str) -> bool:
-        """删除凭证"""
+        """Delete credential"""
         async with self.session() as s:
             row = await s.scalar(
                 select(AntigravityCredential).where(AntigravityCredential.email == email)
@@ -394,12 +394,12 @@ class Database:
     async def get_next_available_credential(
         self, model_name: Optional[str] = None
     ) -> Optional[Tuple[str, Dict[str, Any]]]:
-        """随机获取一个可用凭证（负载均衡 + 模型家族级冷却过滤），返回 (email, credential)"""
+        """Randomly get an available credential (load balancing + model family cooldown filtering), returns (email, credential)"""
         current_time = time.time()
         cd_group = get_cooldown_group(model_name) if model_name else None
         async with self.session() as s:
-            # 轻量查询：只取必要的小字段（email/冷却/禁用），避免全表加载
-            # access_token/refresh_token 等大字段（凭证明文可达数 KB）
+            # Lightweight query: only fetch essential small fields (email/cooldown/disabled) to avoid loading full table
+            # Large fields like access_token/refresh_token (credentials plaintext can reach several KB)
             rows = (
                 await s.execute(
                     select(
@@ -412,7 +412,7 @@ class Database:
             ).all()
             if not rows:
                 return None
-            # Python 侧随机负载均衡（过滤模型家族冷却）
+            # Python-side random load balancing (filter model family cooldowns)
             candidates = rows
             if cd_group:
                 candidates = []
@@ -425,7 +425,7 @@ class Database:
             if not candidates:
                 return None
             picked_email = random.choice(candidates)[0]
-            # 只取被选中凭证的完整数据
+            # Only fetch full data for the selected credential
             row = await s.scalar(
                 select(AntigravityCredential).where(
                     AntigravityCredential.email == picked_email
@@ -439,8 +439,8 @@ class Database:
         self, email: str, model_name: Optional[str] = None
     ) -> Optional[Tuple[str, Dict[str, Any]]]:
         """
-        按指定 email 获取可用凭证（凭证亲和/粘性模式使用）。
-        凭证不存在/被禁用/该模型家族冷却中 -> None。
+        Get available credential by specified email (used by credential affinity/sticky mode).
+        Credential nonexistent / disabled / model family in cooldown -> None.
         """
         if not email:
             return None
@@ -459,12 +459,12 @@ class Database:
                     return None
             return row.email, _row_to_credential_dict(row)
 
-    # ---------- 状态管理 ----------
+    # ---------- State Management ----------
 
     async def update_credential_state(
         self, email: str, state_updates: Dict[str, Any]
     ) -> bool:
-        """更新凭证状态字段"""
+        """Update credential state fields"""
         json_fields = {"error_codes", "error_messages", "model_cooldowns"}
         float_fields = {"last_success"}
         str_fields = {"user_email", "tier", "project_id"}
@@ -493,7 +493,7 @@ class Database:
     async def get_credential_state(
         self, email: str
     ) -> Dict[str, Any]:
-        """获取凭证状态（不含 error_messages）"""
+        """Get credential state (excluding error_messages)"""
         async with self.session() as s:
             row = await s.scalar(
                 select(AntigravityCredential).where(AntigravityCredential.email == email)
@@ -511,7 +511,7 @@ class Database:
             }
 
     async def get_all_credential_states(self) -> Dict[str, Dict[str, Any]]:
-        """获取所有凭证状态（自动过滤过期CD）"""
+        """Get all credential states (automatically filter expired CDs)"""
         current_time = time.time()
         async with self.session() as s:
             rows = (await s.scalars(select(AntigravityCredential))).all()
@@ -539,7 +539,7 @@ class Database:
         cooldown_filter: Optional[str] = None,
         tier_filter: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """凭证摘要（分页 + 状态筛选，内存过滤）"""
+        """Credentials summary (pagination + status filtering, in-memory filtering)"""
         current_time = time.time()
         async with self.session() as s:
             total = await s.scalar(select(func.count()).select_from(AntigravityCredential)) or 0
@@ -625,7 +625,7 @@ class Database:
             }
 
     async def get_duplicate_credentials_by_email(self) -> Dict[str, Any]:
-        """按邮箱分组的重复凭证（email 即唯一键，此结构保留用于展示统计）"""
+        """Duplicate credentials grouped by email (email is the unique key; structure kept for stats display)"""
         async with self.session() as s:
             rows = (await s.scalars(select(AntigravityCredential).order_by(AntigravityCredential.id))).all()
             emails = [row.email for row in rows]
@@ -640,7 +640,7 @@ class Database:
             }
 
     async def get_credential_errors(self, email: str) -> Dict[str, Any]:
-        """获取凭证的错误信息"""
+        """Get credential error information"""
         async with self.session() as s:
             row = await s.scalar(
                 select(AntigravityCredential).where(AntigravityCredential.email == email)
@@ -653,7 +653,7 @@ class Database:
                 }
             return {"email": email, "error_codes": [], "error_messages": []}
 
-    # ---------- 模型级冷却 ----------
+    # ---------- Model-level Cooldown ----------
 
     async def set_model_cooldown(
         self,
@@ -661,7 +661,7 @@ class Database:
         model_name: str,
         cooldown_until: Optional[float],
     ) -> bool:
-        """设置/清除模型的冷却时间（按家族分组：argon / gemini / claude_gpt / 其他原名）"""
+        """Set/clear model cooldown time (grouped by family: argon / gemini / claude_gpt / other original name)"""
         cd_group = get_cooldown_group(model_name)
         async with self.session() as s:
             row = await s.scalar(
@@ -679,7 +679,7 @@ class Database:
             return True
 
     async def clear_all_model_cooldowns(self, email: str) -> bool:
-        """清除某凭证的所有模型冷却"""
+        """Clear all model cooldowns for a credential"""
         async with self.session() as s:
             row = await s.scalar(
                 select(AntigravityCredential).where(AntigravityCredential.email == email)
@@ -693,7 +693,7 @@ class Database:
     async def record_success(
         self, email: str, model_name: Optional[str] = None
     ) -> None:
-        """成功调用后的条件写入（清除错误 + 该模型家族的CD）"""
+        """Conditional write after successful call (clear errors + CD for this model family)"""
         async with self.session() as s:
             row = await s.scalar(
                 select(AntigravityCredential).where(AntigravityCredential.email == email)
@@ -718,7 +718,7 @@ class Database:
             if changed:
                 log.debug(f"Recorded success for {email} (model={model_name})")
 
-    # ---------- 配置管理（内存缓存） ----------
+    # ---------- Configuration Management (In-Memory Cache) ----------
 
     async def _load_config_cache(self) -> None:
         async with self.session() as s:
@@ -738,7 +738,7 @@ class Database:
         log.info("Config cache reloaded from database")
 
     async def set_config(self, key: str, value: Any) -> bool:
-        """设置配置（写库 + 更新缓存）"""
+        """Set configuration (write to DB + update cache)"""
         async with self.session() as s:
             item = await s.get(ConfigItem, key)
             serialized = _dump_json(value)
@@ -767,10 +767,10 @@ class Database:
                 return True
             return False
 
-    # ---------- 请求日志（usage_log） ----------
+    # ---------- Request Logs (usage_log) ----------
 
     async def insert_usage_log(self, entry: Dict[str, Any]) -> bool:
-        """写入一条请求日志（失败仅告警，不影响主流程）"""
+        """Insert a request log entry (failure only logs warning, does not affect main flow)"""
         try:
             async with self.session() as s:
                 s.add(UsageLog(
@@ -794,7 +794,7 @@ class Database:
                 ))
                 return True
         except SQLAlchemyError as e:
-            log.warning(f"写入请求日志失败: {e}")
+            log.warning(f"Failed to write request log: {e}")
             return False
 
     async def query_usage_logs(
@@ -810,7 +810,7 @@ class Database:
         is_stream: Optional[bool] = None,
         status_code: Optional[int] = None,
     ) -> Tuple[List[Dict[str, Any]], int]:
-        """分页查询请求日志，返回 (日志列表, 总数)，新 -> 旧"""
+        """Paginated query for request logs, returns (log_list, total_count), newest -> oldest"""
         stmt = select(UsageLog)
         count_stmt = select(func.count()).select_from(UsageLog)
 
@@ -889,7 +889,7 @@ class Database:
         credential_email: str = "",
         api_format: str = "",
     ) -> Dict[str, Any]:
-        """聚合统计：总请求数 / 成功数 / 失败数 / token 汇总 / 平均耗时 / 每模型聚合"""
+        """Aggregated statistics: total requests / success count / error count / token summary / average latency / per-model aggregation"""
         conditions = []
         if start_timestamp:
             conditions.append(UsageLog.created_at >= start_timestamp)
@@ -946,7 +946,7 @@ class Database:
         }
 
     async def delete_usage_logs_before(self, before_timestamp: float) -> int:
-        """删除指定时间之前的日志，返回删除条数"""
+        """Delete logs before specified timestamp, returns number of deleted rows"""
         async with self.session() as s:
             result = await s.execute(
                 text("DELETE FROM usage_log WHERE created_at < :ts"),
@@ -954,7 +954,7 @@ class Database:
             )
             return result.rowcount or 0
 
-    # ---------- 后端信息 ----------
+    # ---------- Backend Information ----------
 
     def get_backend_info(self) -> Dict[str, Any]:
         return {
@@ -969,14 +969,14 @@ class Database:
         }
 
 
-# ====================== 全局单例 ======================
+# ====================== Global Singleton ======================
 
 _database: Optional[Database] = None
 _database_lock = asyncio.Lock()
 
 
 async def get_database() -> Database:
-    """获取全局数据库实例"""
+    """Get global database instance"""
     global _database
     if _database is None:
         async with _database_lock:
@@ -988,7 +988,7 @@ async def get_database() -> Database:
 
 
 async def close_database() -> None:
-    """关闭全局数据库"""
+    """Close global database"""
     global _database
     if _database:
         await _database.close()

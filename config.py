@@ -2,8 +2,8 @@
 Configuration constants for the Geminicli2api proxy server.
 Centralizes all configuration to avoid duplication across modules.
 
-- 启动时加载一次配置到内存
-- 修改配置时调用 reload_config() 重新从数据库加载
+- Loads configuration into memory once on startup
+- Calls reload_config() to reload from database when configuration is updated
 """
 
 import ipaddress
@@ -14,18 +14,18 @@ from typing import Any, Optional
 
 from log import log
 
-# 全局配置缓存
+# Global configuration cache
 _config_cache: dict[str, Any] = {}
 _config_initialized = False
 
 # Client Configuration
 
-# 需要自动封禁的错误码 (默认值，可通过环境变量或配置覆盖)
+# Error codes requiring auto-ban (default values, can be overridden by env var or config)
 AUTO_BAN_ERROR_CODES = [403]
 
-# ====================== 环境变量映射表 ======================
-# 统一维护环境变量名和配置键名的映射关系
-# 格式: "环境变量名": "配置键名"
+# ====================== Environment Variable Mapping ======================
+# Uniformly maintain mappings between environment variable names and config key names
+# Format: "ENV_VAR_NAME": "config_key_name"
 ENV_MAPPINGS = {
     "CREDENTIALS_DIR": "credentials_dir",
     "PROXY": "proxy",
@@ -45,6 +45,7 @@ ENV_MAPPINGS = {
     "IP_WHITELIST_ENABLED": "ip_whitelist_enabled",
     "MODEL_REWRITE_ENABLED": "model_rewrite_enabled",
     "MODEL_REWRITE_RULES": "model_rewrite_rules",
+    "VISIBLE_MODELS": "visible_models",
     "USAGE_LOG_ENABLED": "usage_log_enabled",
     "REQUEST_LOG_ENABLED": "request_log_enabled",
     "REQUEST_LOG_ERROR_CODES": "request_log_error_codes",
@@ -56,10 +57,10 @@ ENV_MAPPINGS = {
 }
 
 
-# ====================== 配置系统 ======================
+# ====================== Configuration System ======================
 
 async def init_config():
-    """初始化配置缓存（启动时调用一次）"""
+    """Initialize configuration cache (called once on startup)."""
     global _config_cache, _config_initialized
 
     if _config_initialized:
@@ -71,23 +72,23 @@ async def init_config():
         _config_cache = await database.get_all_config()
         _config_initialized = True
     except Exception:
-        # 初始化失败时使用空缓存
+        # Use empty cache on initialization failure
         _config_cache = {}
         _config_initialized = True
 
 
 async def reload_config():
-    """重新加载配置（修改配置后调用）"""
+    """Reload configuration (called after modifying configuration)."""
     global _config_cache, _config_initialized
 
     try:
         from src.storage.database import get_database
         database = await get_database()
 
-        # 重新加载数据库配置缓存
+        # Reload database configuration cache
         await database.reload_config_cache()
 
-        # 重新加载配置缓存
+        # Reload configuration cache
         _config_cache = await database.get_all_config()
         _config_initialized = True
     except Exception:
@@ -95,13 +96,13 @@ async def reload_config():
 
 
 def _get_cached_config(key: str, default: Any = None) -> Any:
-    """从内存缓存获取配置（同步）"""
+    """Get configuration from in-memory cache (synchronous)."""
     return _config_cache.get(key, default)
 
 
 async def get_config_value(key: str, default: Any = None, env_var: Optional[str] = None) -> Any:
     """Get configuration value with priority: ENV > Storage > default."""
-    # 确保配置已初始化
+    # Ensure configuration is initialized
     if not _config_initialized:
         await init_config()
 
@@ -132,7 +133,7 @@ async def get_proxy_config():
     scheme = proxy_url.split("://", 1)[0].lower()
     if scheme not in ("http", "https", "socks5", "socks5h"):
         log.warning(
-            f"不支持的代理协议: {scheme}://（支持 http/https/socks5/socks5h），已忽略代理"
+            f"Unsupported proxy protocol: {scheme}:// (supports http/https/socks5/socks5h), proxy ignored"
         )
         return None
     return proxy_url
@@ -281,12 +282,14 @@ async def get_credentials_dir() -> str:
     """
     return str(await get_config_value("credentials_dir", "./creds", "CREDENTIALS_DIR"))
 
+
 async def get_return_thoughts_to_frontend() -> bool:
     """
     Get return thoughts to frontend setting.
 
-    控制是否将思维链返回到前端。
-    启用后，思维链会在响应中返回；禁用后，思维链会在响应中被过滤掉。
+    Controls whether thinking chain is returned to the frontend.
+    When enabled, thought reasoning is returned in the response;
+    when disabled, thought reasoning is filtered out.
 
     Environment variable: RETURN_THOUGHTS_TO_FRONTEND
     Database config key: return_thoughts_to_frontend
@@ -299,15 +302,15 @@ async def get_return_thoughts_to_frontend() -> bool:
     return bool(await get_config_value("return_thoughts_to_frontend", True))
 
 
-# ====================== 敏感词过滤 ======================
+# ====================== Sensitive Words Filter ======================
 
-# 敏感词正则编译缓存: (原始词表指纹, 编译后的 pattern 列表)
+# Sensitive words regex compilation cache: (original words fingerprint, compiled pattern list)
 _sensitive_words_cache: dict = {"fingerprint": None, "patterns": []}
 
 
 async def get_sensitive_words_enabled() -> bool:
     """
-    敏感词过滤开关。
+    Sensitive words filter toggle.
 
     Environment variable: SENSITIVE_WORDS_ENABLED
     Database config key: sensitive_words_enabled
@@ -322,9 +325,9 @@ async def get_sensitive_words_enabled() -> bool:
 
 async def get_sensitive_words() -> list:
     """
-    敏感词列表（支持正则），每行一个；空列表表示不过滤。
+    Sensitive words list (supports regex), one per line; empty list means no filtering.
 
-    Environment variable: SENSITIVE_WORDS (逗号或换行分隔)
+    Environment variable: SENSITIVE_WORDS (comma or newline separated)
     Database config key: sensitive_words
     Default: []
     """
@@ -343,13 +346,13 @@ async def get_sensitive_words() -> list:
 
 def compile_sensitive_words(words: list):
     """
-    编译敏感词为大小写不敏感的正则列表（带缓存）。
+    Compile sensitive words into case-insensitive regex patterns (cached).
 
-    每个词按字面量转义后编译（用户输入的是词/短语而非正则语法），
-    触发后整词替换为空。支持中文（re.UNICODE 默认开启）。
+    Each word is escaped as a literal before compilation (user inputs words/phrases, not regex syntax),
+    matching words are replaced with empty strings. Supports Unicode.
 
     Returns:
-        编译后的 Pattern 列表；无效条目跳过并告警。
+        Compiled Pattern list; invalid entries are skipped with a warning.
     """
     fingerprint = tuple(words)
     if _sensitive_words_cache["fingerprint"] == fingerprint:
@@ -363,7 +366,7 @@ def compile_sensitive_words(words: list):
         try:
             patterns.append(re.compile(re.escape(word), re.IGNORECASE | re.UNICODE))
         except re.error as e:
-            log.warning(f"敏感词编译失败，已跳过: {word!r} ({e})")
+            log.warning(f"Failed to compile sensitive word, skipped: {word!r} ({e})")
 
     _sensitive_words_cache["fingerprint"] = fingerprint
     _sensitive_words_cache["patterns"] = patterns
@@ -371,7 +374,7 @@ def compile_sensitive_words(words: list):
 
 
 def apply_sensitive_word_filter(text: str, patterns) -> str:
-    """将文本中命中的敏感词（大小写不敏感）替换为空"""
+    """Replace matched sensitive words (case-insensitive) in text with empty string."""
     if not text or not patterns:
         return text
     for pattern in patterns:
@@ -381,10 +384,10 @@ def apply_sensitive_word_filter(text: str, patterns) -> str:
 
 async def get_sensitive_word_filter():
     """
-    获取生效的敏感词过滤条件（供请求处理管道调用）。
+    Get active sensitive words filter condition (for request handling pipeline).
 
     Returns:
-        (enabled, patterns)；未启用时 patterns 为空列表。
+        (enabled, patterns); patterns is empty list when disabled.
     """
     if not await get_sensitive_words_enabled():
         return False, []
@@ -394,24 +397,24 @@ async def get_sensitive_word_filter():
     return True, compile_sensitive_words(words)
 
 
-# ====================== IP 白名单 ======================
+# ====================== IP Whitelist ======================
 
-# IP 白名单规则缓存: (原始条目指纹, 解析结果 (rules, invalid))
+# IP whitelist rule cache: (original entries fingerprint, parsed result (rules, invalid))
 _ip_whitelist_cache: dict = {"fingerprint": None, "result": ([], [])}
 
 
 def parse_ip_whitelist_line(line: str):
     """
-    解析单条白名单条目为 (lo, hi, version) 网络对象；无效时抛出 ValueError。
+    Parse single whitelist entry into (lo, hi, version) network objects; raises ValueError if invalid.
 
-    支持格式（IPv4 / IPv6）：
-    - 单个 IP: 192.168.1.1 / ::1
-    - CIDR 网段: 192.168.1.0/24 / 2001:db8::/32
-    - IP 起止范围（- 或 ~ 分隔）: 192.168.1.1-192.168.1.100 / ::1-::10
+    Supported formats (IPv4 / IPv6):
+    - Single IP: 192.168.1.1 / ::1
+    - CIDR subnet: 192.168.1.0/24 / 2001:db8::/32
+    - IP range (- or ~ separated): 192.168.1.1-192.168.1.100 / ::1-::10
     """
     line = str(line).strip()
     if not line:
-        raise ValueError("空条目")
+        raise ValueError("Empty entry")
 
     for sep in ("~", "-"):
         if sep in line:
@@ -420,7 +423,7 @@ def parse_ip_whitelist_line(line: str):
                 start = ipaddress.ip_address(start_str.strip())
                 end = ipaddress.ip_address(end_str.strip())
                 if start.version != end.version:
-                    raise ValueError(f"起止 IP 版本不一致: {line}")
+                    raise ValueError(f"Mismatched start/end IP versions: {line}")
                 if int(start) > int(end):
                     start, end = end, start
                 return start, end, start.version
@@ -435,10 +438,10 @@ def parse_ip_whitelist_line(line: str):
 
 def compile_ip_whitelist(entries: list):
     """
-    解析白名单条目列表为规则列表（带缓存）。
+    Parse whitelist entries into rules list (cached).
 
     Returns:
-        (rules, invalid)——rules 为 [(lo, hi, version), ...]，invalid 为解析失败的原始条目。
+        (rules, invalid) - rules is [(lo, hi, version), ...], invalid contains failed entries.
     """
     fingerprint = tuple(str(e) for e in entries)
     if _ip_whitelist_cache["fingerprint"] == fingerprint:
@@ -462,7 +465,7 @@ def compile_ip_whitelist(entries: list):
 
 
 def ip_in_whitelist(client_ip: str, rules: list) -> bool:
-    """判断客户端 IP 是否命中白名单规则（IPv4/IPv6 均支持）"""
+    """Check if client IP matches whitelist rules (supports IPv4 and IPv6)."""
     if not client_ip:
         return False
     try:
@@ -474,7 +477,7 @@ def ip_in_whitelist(client_ip: str, rules: list) -> bool:
 
 async def get_ip_whitelist_enabled() -> bool:
     """
-    IP 白名单开关。
+    IP whitelist toggle.
 
     Environment variable: IP_WHITELIST_ENABLED
     Database config key: ip_whitelist_enabled
@@ -489,12 +492,12 @@ async def get_ip_whitelist_enabled() -> bool:
 
 async def get_ip_whitelist() -> list:
     """
-    IP 白名单列表，每行一条；空列表表示不限制。
+    IP whitelist list, one entry per line; empty list means unrestricted.
 
-    支持单个 IP、CIDR 网段、起止范围（- 或 ~ 分隔），IPv4/IPv6 均可。
-    仅在开关开启时生效，命中白名单以外 IP 的所有请求（面板 + API）将直接返回 403。
+    Supports single IP, CIDR subnet, start-end ranges (- or ~ separated), IPv4/IPv6.
+    Only takes effect when enabled; all requests outside whitelist (panel + API) return 403.
 
-    Environment variable: IP_WHITELIST (逗号或换行分隔)
+    Environment variable: IP_WHITELIST (comma or newline separated)
     Database config key: ip_whitelist
     Default: []
     """
@@ -512,10 +515,10 @@ async def get_ip_whitelist() -> list:
 
 async def get_ip_whitelist_rules():
     """
-    获取生效的 IP 白名单规则（供请求拦截中间件调用）。
+    Get active IP whitelist rules (for request interception middleware).
 
     Returns:
-        (enabled, rules)；开关关闭或白名单为空时不启用限制。
+        (enabled, rules); restriction not enabled when toggle is off or whitelist is empty.
     """
     if not await get_ip_whitelist_enabled():
         return False, []
@@ -524,19 +527,19 @@ async def get_ip_whitelist_rules():
         return False, []
     rules, invalid = compile_ip_whitelist(entries)
     if invalid:
-        log.warning(f"IP 白名单中存在无效条目（已跳过）: {invalid}")
+        log.warning(f"Invalid entries found in IP whitelist (skipped): {invalid}")
     return bool(rules), rules
 
 
-# ====================== 模型名复写 ======================
+# ====================== Model Name Rewrite ======================
 
-# 模型名复写规则缓存: (指纹, (编译后的规则列表, 无效规则列表))
+# Model name rewrite rule cache: (fingerprint, (compiled rules list, invalid rules list))
 _model_rewrite_cache: dict = {"fingerprint": None, "result": ([], [])}
 
 
 async def get_model_rewrite_enabled() -> bool:
     """
-    模型名复写开关。
+    Model name rewrite toggle.
 
     Environment variable: MODEL_REWRITE_ENABLED
     Database config key: model_rewrite_enabled
@@ -551,12 +554,12 @@ async def get_model_rewrite_enabled() -> bool:
 
 async def get_model_rewrite_rules_config() -> list:
     """
-    模型名复写规则列表，每条为 [pattern, replacement]。
+    Model name rewrite rule list, each entry is [pattern, replacement].
 
-    pattern 支持正则（对模型名做全匹配搜索，命中任意一处即替换），
-    replacement 中可使用正则反向引用（如 \\1）。
+    pattern supports regex (searches model name, replaces on match),
+    replacement can use regex backreferences (e.g. \\1).
 
-    Environment variable: MODEL_REWRITE_RULES (JSON 数组，如 [["gpt-4","gemini-2.5-pro"]]；也支持 "pat->rep" 逗号分隔的简化格式)
+    Environment variable: MODEL_REWRITE_RULES (JSON array, e.g. [["gpt-4","gemini-2.5-pro"]]; also supports "pat->rep" comma-separated format)
     Database config key: model_rewrite_rules
     Default: []
     """
@@ -571,7 +574,7 @@ async def get_model_rewrite_rules_config() -> list:
 
 
 def _parse_model_rewrite_rules_value(value: Any) -> Optional[list]:
-    """将配置值解析为 [[pattern, replacement], ...]；无法解析时返回 None"""
+    """Parse config value into [[pattern, replacement], ...]; returns None on failure."""
     if isinstance(value, list):
         rules = []
         for item in value:
@@ -581,7 +584,7 @@ def _parse_model_rewrite_rules_value(value: Any) -> Optional[list]:
                 rules.append([item["pattern"], item["replacement"]])
         return rules
     if isinstance(value, str) and value.strip():
-        # 优先尝试 JSON 数组格式（环境变量推荐格式）
+        # Prefer JSON array format (recommended env var format)
         if value.strip().startswith("["):
             try:
                 parsed = json.loads(value)
@@ -591,7 +594,7 @@ def _parse_model_rewrite_rules_value(value: Any) -> Optional[list]:
                         return inner
             except (json.JSONDecodeError, ValueError):
                 pass
-        # 兼容 "pat->rep,pat->rep" 简化格式
+        # Compatible with "pat->rep,pat->rep" simplified format
         rules = []
         for pair in value.split(","):
             pair = pair.strip()
@@ -604,10 +607,10 @@ def _parse_model_rewrite_rules_value(value: Any) -> Optional[list]:
 
 def compile_model_rewrite_rules(rules: list):
     """
-    编译复写规则为 (pattern, replacement) 元组列表（带缓存）。
+    Compile rewrite rules into (pattern, replacement) tuples (cached).
 
     Returns:
-        (compiled, invalid)——invalid 为编译失败的原始规则。
+        (compiled, invalid) - invalid contains rules that failed compilation.
     """
     fingerprint = tuple(tuple(r) for r in rules)
     if _model_rewrite_cache["fingerprint"] == fingerprint:
@@ -632,9 +635,9 @@ def compile_model_rewrite_rules(rules: list):
 
 def rewrite_model_name(model_name: str, compiled_rules: list) -> str:
     """
-    按规则顺序应用模型名复写（命中第一条即停止）。
+    Apply model name rewrites in order (stops at first match).
 
-    使用 re.sub 全字符串搜索替换；replacement 支持 \\1 等反向引用。
+    Uses re.sub for full string search and replace; replacement supports \\1 backreferences.
     """
     for pattern, replacement in compiled_rules:
         if pattern.search(model_name):
@@ -644,10 +647,10 @@ def rewrite_model_name(model_name: str, compiled_rules: list) -> str:
 
 async def get_model_rewrite_filter():
     """
-    获取生效的模型名复写规则（供请求处理管道调用）。
+    Get active model rewrite rules (for request handling pipeline).
 
     Returns:
-        (enabled, compiled_rules)；未启用时 compiled_rules 为空列表。
+        (enabled, compiled_rules); compiled_rules is empty list when disabled.
     """
     if not await get_model_rewrite_enabled():
         return False, []
@@ -656,15 +659,36 @@ async def get_model_rewrite_filter():
         return False, []
     compiled, invalid = compile_model_rewrite_rules(rules)
     if invalid:
-        log.warning(f"模型名复写规则中存在无效正则（已跳过）: {invalid}")
+        log.warning(f"Invalid regex found in model rewrite rules (skipped): {invalid}")
     return bool(compiled), compiled
 
 
-# ====================== 请求日志 ======================
+async def get_visible_models() -> list:
+    """
+    Get list of models to show/expose in model list endpoints (/v1/models, /v1beta/models).
+    Empty list means all available upstream models are shown.
+
+    Environment variable: VISIBLE_MODELS (comma or newline separated)
+    Database config key: visible_models
+    Default: []
+    """
+    env_value = os.getenv("VISIBLE_MODELS")
+    if env_value is not None and env_value.strip():
+        return [m.strip() for m in re.split(r"[,\n]", env_value) if m.strip()]
+
+    value = await get_config_value("visible_models")
+    if isinstance(value, list):
+        return [str(m).strip() for m in value if str(m).strip()]
+    if isinstance(value, str) and value.strip():
+        return [m.strip() for m in re.split(r"[,\n]", value) if m.strip()]
+    return []
+
+
+# ====================== Request Logging ======================
 
 async def get_usage_log_enabled() -> bool:
     """
-    请求日志（usage_log）开关。
+    Request usage log (usage_log) toggle.
 
     Environment variable: USAGE_LOG_ENABLED
     Database config key: usage_log_enabled
@@ -679,7 +703,7 @@ async def get_usage_log_enabled() -> bool:
 
 async def get_request_log_enabled() -> bool:
     """
-    请求体详细日志开关。
+    Detailed request body log toggle.
 
     Environment variable: REQUEST_LOG_ENABLED
     Database config key: request_log_enabled
@@ -694,9 +718,9 @@ async def get_request_log_enabled() -> bool:
 
 async def get_request_log_error_codes() -> list:
     """
-    请求体详细日志记录的错误码列表（仅命中时写盘）。
+    Error codes list for detailed request body logging (persisted to disk only on match).
 
-    Environment variable: REQUEST_LOG_ERROR_CODES (逗号分隔, 如 "400,429")
+    Environment variable: REQUEST_LOG_ERROR_CODES (comma-separated, e.g. "400,429")
     Database config key: request_log_error_codes
     Default: [400]
     """
@@ -713,18 +737,18 @@ async def get_request_log_error_codes() -> list:
     return [400]
 
 
-# ====================== 凭证选择模式 ======================
+# ====================== Credential Select Mode ======================
 
-# 合法的凭证选择模式
+# Valid credential select modes
 CREDENTIAL_SELECT_MODES = ("random", "cache", "sticky")
 
 
 async def get_credential_select_mode() -> str:
     """
-    凭证选择模式:
-    - random: 完全随机负载均衡（无亲和）
-    - cache:  会话缓存匹配（默认）——相同会话内容复用同一凭证，命中上游 prompt cache
-    - sticky: 凭证粘性——尽量保持同一凭证直到其进入 CD 或被禁用
+    Credential selection mode:
+    - random: Pure random load balancing (no affinity)
+    - cache:  Session cache match (default) - reuses same credential for identical session to hit upstream prompt cache
+    - sticky: Sticky credential - maintains same credential until cooldown or disabled
 
     Environment variable: CREDENTIAL_SELECT_MODE
     Database config key: credential_select_mode
@@ -733,7 +757,7 @@ async def get_credential_select_mode() -> str:
     value = await get_config_value("credential_select_mode", "cache", "CREDENTIAL_SELECT_MODE")
     value = str(value).strip().lower()
     if value not in CREDENTIAL_SELECT_MODES:
-        log.warning(f"无效的凭证选择模式: {value}，回落为 cache")
+        log.warning(f"Invalid credential selection mode: {value}, falling back to cache")
         return "cache"
     return value
 
@@ -742,7 +766,7 @@ async def get_oauth_proxy_url() -> str:
     """
     Get OAuth proxy URL setting.
 
-    用于Google OAuth2认证的代理URL。
+    Proxy URL used for Google OAuth2 authentication.
 
     Environment variable: OAUTH_PROXY_URL
     Database config key: oauth_proxy_url
@@ -759,7 +783,7 @@ async def get_googleapis_proxy_url() -> str:
     """
     Get Google APIs proxy URL setting.
 
-    用于Google APIs调用的代理URL。
+    Proxy URL used for Google APIs invocations.
 
     Environment variable: GOOGLEAPIS_PROXY_URL
     Database config key: googleapis_proxy_url
@@ -776,7 +800,7 @@ async def get_antigravity_api_url() -> str:
     """
     Get Antigravity API URL setting.
 
-    用于Google Antigravity API的URL。
+    URL used for Google Antigravity API.
 
     Environment variable: ANTIGRAVITY_API_URL
     Database config key: antigravity_api_url

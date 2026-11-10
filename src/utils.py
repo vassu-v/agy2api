@@ -12,7 +12,7 @@ security = HTTPBearer()
 
 # ====================== OAuth Configuration ======================
 
-# Antigravity CLI 客户端仿真常量
+# Antigravity CLI client emulation constants
 _DEFAULT_ANTIGRAVITY_CLI_VERSION = "1.5.3"
 _LATEST_RELEASE_URL = (
     "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/latest"
@@ -20,7 +20,7 @@ _LATEST_RELEASE_URL = (
 
 
 def _get_latest_antigravity_cli_version() -> str:
-    """获取最新 Antigravity CLI 版本；获取失败时返回默认版本。"""
+    """Fetch latest Antigravity CLI version; returns default version on failure."""
     try:
         response = httpx.get(
             _LATEST_RELEASE_URL,
@@ -31,7 +31,7 @@ def _get_latest_antigravity_cli_version() -> str:
         release_data = response.json()
     except (httpx.HTTPError, ValueError) as error:
         log.warning(
-            "获取最新 Antigravity CLI 版本失败，使用默认版本 "
+            "Failed to fetch latest Antigravity CLI version, using default version "
             f"{_DEFAULT_ANTIGRAVITY_CLI_VERSION}: {error}"
         )
         return _DEFAULT_ANTIGRAVITY_CLI_VERSION
@@ -39,7 +39,7 @@ def _get_latest_antigravity_cli_version() -> str:
     tag_name = release_data.get("tag_name") if isinstance(release_data, dict) else None
     if not isinstance(tag_name, str) or not tag_name.strip():
         log.warning(
-            "GitHub API 响应中没有有效的 tag_name，使用默认版本 "
+            "GitHub API response lacks valid tag_name, using default version "
             f"{_DEFAULT_ANTIGRAVITY_CLI_VERSION}"
         )
         return _DEFAULT_ANTIGRAVITY_CLI_VERSION
@@ -50,7 +50,7 @@ def _get_latest_antigravity_cli_version() -> str:
 ANTIGRAVITY_CLI_VERSION = _get_latest_antigravity_cli_version()
 ANTIGRAVITY_CLI_PLATFORM = "windows/amd64"
 ANTIGRAVITY_USER_AGENT = f"antigravity/cli/{ANTIGRAVITY_CLI_VERSION} {ANTIGRAVITY_CLI_PLATFORM}"
-log.info(f"当前 Antigravity CLI 版本: {ANTIGRAVITY_CLI_VERSION}")
+log.info(f"Current Antigravity CLI version: {ANTIGRAVITY_CLI_VERSION}")
 
 # Antigravity OAuth Configuration
 ANTIGRAVITY_CLIENT_ID = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
@@ -63,27 +63,28 @@ ANTIGRAVITY_SCOPES = [
     'https://www.googleapis.com/auth/experimentsandconfigs'
 ]
 
-# 统一的 Token URL（两种模式相同）
+# Unified Token URL (same for both modes)
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 
-# 回调服务器配置
+# Callback server configuration
 CALLBACK_HOST = "localhost"
 
 # ====================== Model Helper Functions ======================
 
-# 抗截断模型前缀
-_ANTI_TRUNCATION_PREFIX = "抗截断-"
+# Autostitch / Anti-truncation model prefixes (keeps legacy Chinese alias for backward compatibility)
+_ANTI_TRUNCATION_PREFIXES = ("autostitch-", "抗截断-")
 
 
 def is_anti_truncation_model(model_name: str) -> bool:
-    """Check if model name indicates anti-truncation should be used."""
-    return model_name.startswith(_ANTI_TRUNCATION_PREFIX)
+    """Check if model name indicates autostitch / anti-truncation should be used."""
+    return any(model_name.startswith(p) for p in _ANTI_TRUNCATION_PREFIXES)
 
 
 def get_base_model_from_feature_model(model_name: str) -> str:
     """Get base model name from feature model name."""
-    if model_name.startswith(_ANTI_TRUNCATION_PREFIX):
-        return model_name[len(_ANTI_TRUNCATION_PREFIX) :]
+    for p in _ANTI_TRUNCATION_PREFIXES:
+        if model_name.startswith(p):
+            return model_name[len(p) :]
     return model_name
 
 
@@ -100,76 +101,76 @@ async def authenticate_flexible(
     key: Optional[str] = Query(None)
 ) -> str:
     """
-    统一的灵活认证函数，支持多种认证方式
+    Unified flexible authentication function supporting multiple authentication mechanisms.
 
-    此函数可以直接用作 FastAPI 的 Depends 依赖
+    This function can be directly used as a FastAPI Depends dependency.
 
-    支持的认证方式:
-        - URL 参数: key
-        - HTTP 头部: Authorization (Bearer token)
-        - HTTP 头部: x-api-key
-        - HTTP 头部: access_token
-        - HTTP 头部: x-goog-api-key
-        - HTTP 头部: x-anthropic-auth-token
-        - HTTP 头部: anthropic-auth-token
+    Supported authentication methods:
+        - URL parameter: key
+        - HTTP header: Authorization (Bearer token)
+        - HTTP header: x-api-key
+        - HTTP header: access_token
+        - HTTP header: x-goog-api-key
+        - HTTP header: x-anthropic-auth-token
+        - HTTP header: anthropic-auth-token
 
     Args:
-        request: FastAPI Request 对象
-        authorization: Authorization 头部值（自动注入）
-        x_api_key: x-api-key 头部值（自动注入）
-        access_token: access_token 头部值（自动注入）
-        x_goog_api_key: x-goog-api-key 头部值（自动注入）
-        x_anthropic_auth_token: x-anthropic-auth-token 头部值（自动注入）
-        anthropic_auth_token: anthropic-auth-token 头部值（自动注入）
-        key: URL 参数 key（自动注入）
+        request: FastAPI Request object
+        authorization: Authorization header value (auto injected)
+        x_api_key: x-api-key header value (auto injected)
+        access_token: access_token header value (auto injected)
+        x_goog_api_key: x-goog-api-key header value (auto injected)
+        x_anthropic_auth_token: x-anthropic-auth-token header value (auto injected)
+        anthropic_auth_token: anthropic-auth-token header value (auto injected)
+        key: URL parameter key (auto injected)
 
     Returns:
-        验证通过的token
+        Validated token string
 
     Raises:
-        HTTPException: 认证失败时抛出异常
+        HTTPException: Raised when authentication fails
 
-    使用示例:
+    Usage:
         @router.post("/endpoint")
         async def endpoint(token: str = Depends(authenticate_flexible)):
-            # token 已验证通过
+            # token validated
             pass
     """
     password = await get_api_password()
     token = None
     auth_method = None
 
-    # 1. 尝试从 URL 参数 key 获取（Google 官方标准方式）
+    # 1. Try URL parameter key (Google official standard)
     if key:
         token = key
         auth_method = "URL parameter 'key'"
 
-    # 2. 尝试从 x-goog-api-key 头部获取（Google API 标准方式）
+    # 2. Try x-goog-api-key header (Google API standard)
     elif x_goog_api_key:
         token = x_goog_api_key
         auth_method = "x-goog-api-key header"
 
-    # 3. 尝试从 x-anthropic-auth-token 头部获取（Anthropic 标准方式）
+    # 3. Try x-anthropic-auth-token header (Anthropic standard)
     elif x_anthropic_auth_token:
         token = x_anthropic_auth_token
         auth_method = "x-anthropic-auth-token header"
 
-    # 4. 尝试从 anthropic-auth-token 头部获取（Anthropic 替代方式）
+    # 4. Try anthropic-auth-token header (Anthropic alternative)
     elif anthropic_auth_token:
         token = anthropic_auth_token
         auth_method = "anthropic-auth-token header"
 
-    # 5. 尝试从 x-api-key 头部获取
+    # 5. Try x-api-key header
     elif x_api_key:
         token = x_api_key
         auth_method = "x-api-key header"
 
-    # 6. 尝试从 access_token 头部获取
+    # 6. Try access_token header
     elif access_token:
         token = access_token
         auth_method = "access_token header"
 
-    # 7. 尝试从 Authorization 头部获取
+    # 7. Try Authorization header
     elif authorization:
         if not authorization.startswith("Bearer "):
             raise HTTPException(
@@ -177,10 +178,10 @@ async def authenticate_flexible(
                 detail="Invalid authentication scheme. Use 'Bearer <token>'",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        token = authorization[7:]  # 移除 "Bearer " 前缀
+        token = authorization[7:]  # Remove "Bearer " prefix
         auth_method = "Authorization Bearer header"
 
-    # 检查是否提供了任何认证凭据
+    # Check whether any authentication credential was provided
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -188,19 +189,19 @@ async def authenticate_flexible(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # 验证 token
+    # Verify token
     if token != password:
         log.debug(f"Authentication failed using {auth_method}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="密码错误"
+            detail="Incorrect password"
         )
     
     log.debug(f"Authentication successful using {auth_method}")
     return token
 
 
-# 为了保持向后兼容，保留旧函数名作为别名
+# Backward compatibility aliases
 authenticate_bearer = authenticate_flexible
 authenticate_gemini_flexible = authenticate_flexible
 
@@ -208,22 +209,8 @@ authenticate_gemini_flexible = authenticate_flexible
 # ====================== Panel Authentication Functions ======================
 
 async def verify_panel_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
-    """
-    简化的控制面板密码验证函数
-
-    直接验证Bearer token是否等于控制面板密码
-
-    Args:
-        credentials: HTTPAuthorizationCredentials 自动注入
-
-    Returns:
-        验证通过的token
-
-    Raises:
-        HTTPException: 密码错误时抛出401异常
-    """
-
+    """Verify panel bearer token against panel password."""
     password = await get_panel_password()
     if credentials.credentials != password:
-        raise HTTPException(status_code=401, detail="密码错误")
+        raise HTTPException(status_code=401, detail="Incorrect password")
     return credentials.credentials

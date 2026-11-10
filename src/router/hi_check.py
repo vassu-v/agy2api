@@ -1,27 +1,27 @@
 """
-统一的健康检查（Hi消息）处理模块
+Unified health check (Hi message) handling module
 
-提供对OpenAI、Gemini和Anthropic格式的Hi消息的解析和响应
+Provides parsing and response generation for Hi messages in OpenAI, Gemini, and Anthropic formats
 """
 import time
 from typing import Any, Dict, List
 
 
-# ==================== Hi消息检测 ====================
+# ==================== Health Check Message Detection ====================
 
 def is_health_check_request(request_data: dict, format: str = "openai") -> bool:
     """
-    检查是否是健康检查请求（Hi消息）
+    Check if the request is a health check request (Hi message)
     
     Args:
-        request_data: 请求数据
-        format: 请求格式（"openai"、"gemini" 或 "anthropic"）
+        request_data: Request data
+        format: Request format ("openai", "gemini", or "anthropic")
         
     Returns:
-        是否是健康检查请求
+        Whether it is a health check request
     """
     if format == "openai":
-        # OpenAI格式健康检查: {"messages": [{"role": "user", "content": "Hi"}]}
+        # OpenAI format health check: {"messages": [{"role": "user", "content": "Hi"}]}
         messages = request_data.get("messages", [])
         if len(messages) == 1:
             msg = messages[0]
@@ -29,7 +29,7 @@ def is_health_check_request(request_data: dict, format: str = "openai") -> bool:
                 return True
                 
     elif format == "gemini":
-        # Gemini格式健康检查: {"contents": [{"role": "user", "parts": [{"text": "Hi"}]}]}
+        # Gemini format health check: {"contents": [{"role": "user", "parts": [{"text": "Hi"}]}]}
         contents = request_data.get("contents", [])
         if len(contents) == 1:
             content = contents[0]
@@ -38,7 +38,7 @@ def is_health_check_request(request_data: dict, format: str = "openai") -> bool:
                 return True
     
     elif format == "anthropic":
-        # Anthropic格式健康检查: {"messages": [{"role": "user", "content": "Hi"}]}
+        # Anthropic format health check: {"messages": [{"role": "user", "content": "Hi"}]}
         messages = request_data.get("messages", [])
         if (len(messages) == 1 
             and messages[0].get("role") == "user" 
@@ -50,15 +50,15 @@ def is_health_check_request(request_data: dict, format: str = "openai") -> bool:
 
 def is_health_check_message(messages: List[Dict[str, Any]]) -> bool:
     """
-    直接检查消息列表是否为健康检查消息（Anthropic专用）
+    Directly check whether the message list is a health check message (Anthropic-specific)
     
-    这是一个便捷函数，用于已经提取出消息列表的场景。
+    This is a convenience function for scenarios where the message list has already been extracted.
     
     Args:
-        messages: 消息列表
+        messages: Message list
         
     Returns:
-        是否为健康检查消息
+        Whether it is a health check message
     """
     return (
         len(messages) == 1 
@@ -67,23 +67,23 @@ def is_health_check_message(messages: List[Dict[str, Any]]) -> bool:
     )
 
 
-# ==================== Hi消息响应生成 ====================
+# ==================== Health Check Response Generation ====================
 
 def create_health_check_response(format: str = "openai", **kwargs) -> dict:
     """
-    创建健康检查响应
+    Create a health check response
     
     Args:
-        format: 响应格式（"openai"、"gemini" 或 "anthropic"）
-        **kwargs: 格式特定的额外参数
-            - model: 模型名称（anthropic格式需要）
-            - message_id: 消息ID（anthropic格式需要）
+        format: Response format ("openai", "gemini", or "anthropic")
+        **kwargs: Format-specific additional arguments
+            - model: Model name (required for anthropic format)
+            - message_id: Message ID (required for anthropic format)
         
     Returns:
-        健康检查响应字典
+        Health check response dictionary
     """
     if format == "openai":
-        # OpenAI格式响应
+        # OpenAI format response
         return {
             "id": "healthcheck",
             "object": "chat.completion",
@@ -100,11 +100,11 @@ def create_health_check_response(format: str = "openai", **kwargs) -> dict:
         }
     
     elif format == "gemini":
-        # Gemini格式响应
+        # Gemini format response
         return {
             "candidates": [{
                 "content": {
-                    "parts": [{"text": "agy2api工作中"}],
+                    "parts": [{"text": "agy2api is working"}],
                     "role": "model"
                 },
                 "finishReason": "STOP",
@@ -113,7 +113,7 @@ def create_health_check_response(format: str = "openai", **kwargs) -> dict:
         }
     
     elif format == "anthropic":
-        # Anthropic格式响应
+        # Anthropic format response
         model = kwargs.get("model", "claude-unknown")
         message_id = kwargs.get("message_id", "msg_healthcheck")
         return {
@@ -121,11 +121,11 @@ def create_health_check_response(format: str = "openai", **kwargs) -> dict:
             "type": "message",
             "role": "assistant",
             "model": str(model),
-            "content": [{"type": "text", "text": "antigravity Anthropic Messages 正常工作中"}],
+            "content": [{"type": "text", "text": "antigravity Anthropic Messages is working normally"}],
             "stop_reason": "end_turn",
             "stop_sequence": None,
             "usage": {"input_tokens": 0, "output_tokens": 0},
         }
     
-    # 未知格式返回空字典
+    # Return empty dictionary for unknown format
     return {}

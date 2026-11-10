@@ -1,5 +1,5 @@
 """
-Panel模块 - 整合所有控制面板路由
+Panel module - Integrates all control panel routes
 """
 
 from fastapi import APIRouter
@@ -8,10 +8,10 @@ from . import auth, creds, config_routes, version, root, usage_logs
 
 
 def create_router() -> APIRouter:
-    """创建并返回整合所有子路由的主路由器"""
+    """Create and return the main router integrating all sub-routers."""
     router = APIRouter()
 
-    # 包含所有子路由
+    # Include all sub-routers
     router.include_router(root.router)
     router.include_router(auth.router)
     router.include_router(creds.router)
@@ -22,7 +22,7 @@ def create_router() -> APIRouter:
     return router
 
 
-# 导出主路由器
+# Export main router
 router = create_router()
 
 __all__ = ["router"]

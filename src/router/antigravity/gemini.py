@@ -1,36 +1,35 @@
 """
 Gemini Router - Handles native Gemini format API requests (Antigravity backend)
-处理原生Gemini格式请求的路由模块（Antigravity后端）
 """
 
-# 标准库
+# Standard library
 import json
 import sys
 import traceback
 from pathlib import Path as _PathlibPath
 
-# 添加项目根目录到Python路径
+# Add project root directory to Python path
 project_root = _PathlibPath(__file__).resolve().parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# 第三方库
+# Third-party libraries
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.testclient import TestClient
 
-# 本地模块 - 配置和日志
+# Local modules - Configuration and logging
 from config import get_anti_truncation_max_attempts
 from log import log
 
-# 本地模块 - 工具和认证
+# Local modules - Utilities and authentication
 from src.utils import (
     get_base_model_from_feature_model,
     is_anti_truncation_model,
     authenticate_gemini_flexible,
 )
 
-# 本地模块 - 基础路由工具
+# Local modules - Base router utilities
 from src.router.hi_check import is_health_check_request, create_health_check_response
 from src.router.stream_passthrough import (
     build_streaming_response_or_error,
@@ -38,13 +37,13 @@ from src.router.stream_passthrough import (
     read_first_async_item,
 )
 
-# 本地模块 - 数据模型
+# Local modules - Data models
 from src.models import GeminiRequest, model_to_dict
 
-# 本地模块 - API 层
+# Local modules - API layer
 from src.api.antigravity import non_stream_request, stream_request
 
-# 本地模块 - 转换器
+# Local modules - Converters
 from src.converter.antigravity_fix import normalize_antigravity_request
 from src.converter.anti_truncation import (
     AntiTruncationStreamProcessor,
@@ -52,12 +51,12 @@ from src.converter.anti_truncation import (
 )
 
 
-# ==================== 路由器初始化 ====================
+# ==================== Router Initialization ====================
 
 router = APIRouter()
 
 
-# ==================== API 路由 ====================
+# ==================== API Routes ====================
 
 @router.post("/v1beta/models/{model:path}:generateContent")
 @router.post("/v1/models/{model:path}:generateContent")
@@ -68,44 +67,44 @@ async def generate_content(
     api_key: str = Depends(authenticate_gemini_flexible),
 ):
     """
-    处理Gemini格式的内容生成请求（非流式）
+    Handle Gemini format content generation requests (non-streaming)
 
     Args:
-        gemini_request: Gemini格式的请求体
-        model: 模型名称
-        api_key: API 密钥
+        gemini_request: Gemini format request body
+        model: Model name
+        api_key: API key
     """
     log.debug(f"[ANTIGRAVITY] Non-streaming request for model: {model}")
 
-    # 转换为字典
+    # Convert to dictionary
     normalized_dict = model_to_dict(gemini_request)
 
-    # 健康检查
+    # Health check
     if is_health_check_request(normalized_dict, format="gemini"):
         response = create_health_check_response(format="gemini")
         return JSONResponse(content=response)
 
-    # 处理模型名称和功能检测
+    # Process model name and feature detection
     use_anti_truncation = is_anti_truncation_model(model)
     real_model = get_base_model_from_feature_model(model)
 
-    # 对于抗截断模型的非流式请求，给出警告
+    # Warn for non-streaming requests with anti-truncation models
     if use_anti_truncation:
-        log.warning("抗截断功能仅在流式传输时有效，非流式请求将忽略此设置")
+        log.warning("Anti-truncation feature is only effective during streaming; non-streaming requests will ignore this setting")
 
-    # 更新模型名为真实模型名
+    # Update model name to real model name
     normalized_dict["model"] = real_model
 
-    # 规范化 Gemini 请求 (使用 antigravity 模式)
+    # Normalize Gemini request (using antigravity mode)
     normalized_dict = await normalize_antigravity_request(normalized_dict)
 
-    # 准备API请求格式 - 提取model并将其他字段放入request中
+    # Prepare API request format - extract model and place other fields into request
     api_request = {
         "model": normalized_dict.pop("model"),
         "request": normalized_dict
     }
 
-    # 调用 API 层的非流式请求
+    # Call API layer non-streaming request
     response = await non_stream_request(
         body=api_request,
         log_ctx={
@@ -115,17 +114,17 @@ async def generate_content(
         },
     )
 
-    # 解包装响应：Antigravity API 可能返回的格式有额外的 response 包装层
-    # 需要提取并返回标准 Gemini 格式
-    # 保持 Gemini 原生的 inlineData 格式,不进行 Markdown 转换
+    # Unwrap response: Antigravity API may return a response with an extra wrapper layer
+    # Extract and return standard Gemini format
+    # Keep Gemini native inlineData format without Markdown conversion
     try:
         if response.status_code == 200:
             response_data = json.loads(response.body if hasattr(response, 'body') else response.content)
-            # 如果有 response 包装，解包装它
+            # If response wrapper exists, unwrap it
             if "response" in response_data:
                 unwrapped_data = response_data["response"]
                 return JSONResponse(content=unwrapped_data)
-        # 错误响应或没有 response 字段，直接返回
+        # Error response or missing response field, return directly
         return response
     except Exception as e:
         log.warning(f"Failed to unwrap response: {e}, returning original response")
@@ -140,38 +139,38 @@ async def stream_generate_content(
     api_key: str = Depends(authenticate_gemini_flexible),
 ):
     """
-    处理Gemini格式的流式内容生成请求
+    Handle Gemini format streaming content generation requests
 
     Args:
-        gemini_request: Gemini格式的请求体
-        model: 模型名称
-        api_key: API 密钥
+        gemini_request: Gemini format request body
+        model: Model name
+        api_key: API key
     """
     log.debug(f"[ANTIGRAVITY] Streaming request for model: {model}")
 
-    # 转换为字典
+    # Convert to dictionary
     normalized_dict = model_to_dict(gemini_request)
 
-    # 处理模型名称和功能检测
+    # Process model name and feature detection
     use_anti_truncation = is_anti_truncation_model(model)
     real_model = get_base_model_from_feature_model(model)
 
-    # 更新模型名为真实模型名
+    # Update model name to real model name
     normalized_dict["model"] = real_model
 
-    # 请求日志上下文（api_format + 客户端 IP + 客户端原始模型名）
+    # Request log context (api_format + client IP + original client model name)
     log_ctx = {
         "api_format": "gemini",
         "client_ip": request.client.host if request.client else "",
         "client_model": model,
     }
 
-    # ========== 流式抗截断生成器 ==========
+    # ========== Streaming Anti-truncation Generator ==========
     async def anti_truncation_generator():
-        # 先进行基础标准化
+        # Perform basic normalization first
         normalized_req = await normalize_antigravity_request(normalized_dict.copy())
 
-        # 准备API请求格式 - 提取model并将其他字段放入request中
+        # Prepare API request format - extract model and place other fields into request
         api_request = {
             "model": normalized_req.pop("model") if "model" in normalized_req else real_model,
             "request": normalized_req
@@ -179,7 +178,7 @@ async def stream_generate_content(
 
         max_attempts = await get_anti_truncation_max_attempts()
 
-        # 首先对payload应用反截断指令
+        # First apply anti-truncation instructions to payload
         anti_truncation_payload = apply_anti_truncation(api_request)
 
         first_attempt_stream = stream_request(body=anti_truncation_payload, native=False, log_ctx=log_ctx)
@@ -204,62 +203,62 @@ async def stream_generate_content(
                 stream_gen = stream_request(body=payload, native=False, log_ctx=log_ctx)
             return StreamingResponse(stream_gen, media_type="text/event-stream")
 
-        # 创建反截断处理器
+        # Create anti-truncation processor
         processor = AntiTruncationStreamProcessor(
             stream_request_wrapper,
             anti_truncation_payload,
             max_attempts,
         )
 
-        # 迭代 process_stream() 生成器，并展开 response 包装
+        # Iterate process_stream() generator and unwrap response layer
         async for chunk in processor.process_stream():
             if isinstance(chunk, (str, bytes)):
                 chunk_str = chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk
 
-                # 解析并展开 response 包装
+                # Parse and unwrap response layer
                 if chunk_str.startswith("data: "):
                     json_str = chunk_str[6:].strip()
 
-                    # 跳过 [DONE] 标记
+                    # Skip [DONE] marker
                     if json_str == "[DONE]":
                         yield chunk
                         continue
 
                     try:
-                        # 解析JSON
+                        # Parse JSON
                         data = json.loads(json_str)
 
-                        # 展开 response 包装
+                        # Unwrap response layer
                         if "response" in data and "candidates" not in data:
-                            log.debug(f"[ANTIGRAVITY-ANTI-TRUNCATION] 展开response包装")
+                            log.debug(f"[ANTIGRAVITY-ANTI-TRUNCATION] Unwrapping response wrapper")
                             unwrapped_data = data["response"]
-                            # 重新构建SSE格式
+                            # Rebuild SSE format
                             yield f"data: {json.dumps(unwrapped_data, ensure_ascii=False)}\n\n".encode('utf-8')
                         else:
-                            # 已经是展开的格式，直接返回
+                            # Already unwrapped format, return directly
                             yield chunk
                     except json.JSONDecodeError:
-                        # JSON解析失败，直接返回原始chunk
+                        # JSON parsing failed, return raw chunk directly
                         yield chunk
                 else:
-                    # 不是SSE格式，直接返回
+                    # Not SSE format, return directly
                     yield chunk
             else:
-                # 其他类型，直接返回
+                # Other types, return directly
                 yield chunk
 
-    # ========== 普通流式生成器 ==========
+    # ========== Standard Streaming Generator ==========
     async def normal_stream_generator():
         normalized_req = await normalize_antigravity_request(normalized_dict.copy())
 
-        # 准备API请求格式 - 提取model并将其他字段放入request中
+        # Prepare API request format - extract model and place other fields into request
         api_request = {
             "model": normalized_req.pop("model"),
             "request": normalized_req
         }
 
-        # 所有流式请求都使用非 native 模式（SSE格式）并展开 response 包装
-        log.debug(f"[ANTIGRAVITY] 使用非native模式，将展开response包装")
+        # All streaming requests use non-native mode (SSE format) and unwrap response layer
+        log.debug(f"[ANTIGRAVITY] Using non-native mode, unwrapping response wrapper")
         stream_gen = stream_request(body=api_request, native=False, log_ctx=log_ctx)
         try:
             first_chunk = await read_first_async_item(stream_gen)
@@ -270,57 +269,57 @@ async def stream_generate_content(
             yield first_chunk
             return
 
-        # 展开 response 包装
+        # Unwrap response layer
         async for chunk in prepend_async_item(first_chunk, stream_gen):
-            # 检查是否是Response对象（错误情况）
+            # Check if it is a Response object (error case)
             if isinstance(chunk, Response):
-                # 将Response转换为SSE格式的错误消息
+                # Convert Response to SSE formatted error message
                 try:
                     error_content = chunk.body if isinstance(chunk.body, bytes) else (chunk.body or b'').encode('utf-8')
                     error_json = json.loads(error_content.decode('utf-8'))
                 except Exception:
                     error_json = {"error": {"code": chunk.status_code, "message": "upstream error", "status": "ERROR"}}
-                log.error(f"[ANTIGRAVITY STREAM] 返回错误给客户端: status={chunk.status_code}, error={str(error_json)[:200]}")
+                log.error(f"[ANTIGRAVITY STREAM] Returning error to client: status={chunk.status_code}, error={str(error_json)[:200]}")
                 yield f"data: {json.dumps(error_json)}\n\n".encode('utf-8')
                 yield b"data: [DONE]\n\n"
                 return
 
-            # 处理SSE格式的chunk
+            # Process SSE format chunk
             if isinstance(chunk, (str, bytes)):
                 chunk_str = chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk
 
-                # 解析并展开 response 包装
+                # Parse and unwrap response layer
                 if chunk_str.startswith("data: "):
                     json_str = chunk_str[6:].strip()
 
-                    # 跳过 [DONE] 标记
+                    # Skip [DONE] marker
                     if json_str == "[DONE]":
                         yield chunk
                         continue
 
                     try:
-                        # 解析JSON
+                        # Parse JSON
                         data = json.loads(json_str)
 
-                        # 展开 response 包装
+                        # Unwrap response layer
                         if "response" in data and "candidates" not in data:
-                            log.debug(f"[ANTIGRAVITY] 展开response包装")
+                            log.debug(f"[ANTIGRAVITY] Unwrapping response wrapper")
                             unwrapped_data = data["response"]
-                            # 重新构建SSE格式
+                            # Rebuild SSE format
                             yield f"data: {json.dumps(unwrapped_data, ensure_ascii=False)}\n\n".encode('utf-8')
                         else:
-                            # 已经是展开的格式，直接返回
+                            # Already unwrapped format, return directly
                             yield chunk
                     except json.JSONDecodeError:
-                        # JSON解析失败，直接返回原始chunk
+                        # JSON parsing failed, return raw chunk directly
                         yield chunk
                 else:
-                    # 不是SSE格式，直接返回
+                    # Not SSE format, return directly
                     yield chunk
 
-    # ========== 根据模式选择生成器 ==========
+    # ========== Select Generator Based on Mode ==========
     if use_anti_truncation:
-        log.info("启用流式抗截断功能")
+        log.info("Enabling streaming anti-truncation feature")
         return await build_streaming_response_or_error(anti_truncation_generator())
     else:
         return await build_streaming_response_or_error(normal_stream_generator())
@@ -332,9 +331,9 @@ async def count_tokens(
     api_key: str = Depends(authenticate_gemini_flexible),
 ):
     """
-    模拟Gemini格式的token计数
+    Simulate Gemini format token count
 
-    使用简单的启发式方法：大约4字符=1token
+    Uses simple heuristic: approximately 4 characters = 1 token
     """
 
     try:
@@ -343,20 +342,20 @@ async def count_tokens(
         log.error(f"Failed to parse JSON request: {e}")
         raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}")
 
-    # 简单的token计数模拟 - 基于文本长度估算
+    # Simple token count simulation - estimate based on text length
     total_tokens = 0
 
-    # 如果有contents字段
+    # If contents field exists
     if "contents" in request_data:
         for content in request_data["contents"]:
             if "parts" in content:
                 for part in content["parts"]:
                     if "text" in part:
-                        # 简单估算：大约4字符=1token
+                        # Simple estimation: approx 4 characters = 1 token
                         text_length = len(part["text"])
                         total_tokens += max(1, text_length // 4)
 
-    # 如果有generateContentRequest字段
+    # If generateContentRequest field exists
     elif "generateContentRequest" in request_data:
         gen_request = request_data["generateContentRequest"]
         if "contents" in gen_request:
@@ -367,29 +366,29 @@ async def count_tokens(
                             text_length = len(part["text"])
                             total_tokens += max(1, text_length // 4)
 
-    # 返回Gemini格式的响应
+    # Return Gemini format response
     return JSONResponse(content={"totalTokens": total_tokens})
 
-# ==================== 测试代码 ====================
+# ==================== Test Code ====================
 
 if __name__ == "__main__":
     """
-    测试代码：演示Gemini路由的流式和非流式响应
-    运行方式: python src/router/antigravity/gemini.py
+    Test code: Demonstrate streaming and non-streaming responses of Gemini router
+    Run: python src/router/antigravity/gemini.py
     """
 
     print("=" * 80)
-    print("Gemini Router (Antigravity Backend) 测试")
+    print("Gemini Router (Antigravity Backend) Test")
     print("=" * 80)
 
-    # 创建测试应用
+    # Create test app
     app = FastAPI()
     app.include_router(router)
 
-    # 测试客户端
+    # Test client
     client = TestClient(app)
 
-    # 测试请求体 (Gemini格式)
+    # Test request body (Gemini format)
     test_request_body = {
         "contents": [
             {
@@ -399,15 +398,15 @@ if __name__ == "__main__":
         ]
     }
 
-    # 测试API密钥（模拟）
+    # Test API key (mock)
     test_api_key = "pwd"
 
     def test_non_stream_request():
-        """测试非流式请求"""
+        """Test non-streaming request"""
         print("\n" + "=" * 80)
-        print("【测试2】非流式请求 (POST /v1/models/gemini-2.5-flash:generateContent)")
+        print("[Test 2] Non-streaming request (POST /v1/models/gemini-2.5-flash:generateContent)")
         print("=" * 80)
-        print(f"请求体: {json.dumps(test_request_body, indent=2, ensure_ascii=False)}\n")
+        print(f"Request body: {json.dumps(test_request_body, indent=2, ensure_ascii=False)}\n")
 
         response = client.post(
             "/v1/models/gemini-2.5-flash:generateContent",
@@ -415,33 +414,33 @@ if __name__ == "__main__":
             params={"key": test_api_key}
         )
 
-        print("非流式响应数据:")
+        print("Non-streaming response data:")
         print("-" * 80)
-        print(f"状态码: {response.status_code}")
+        print(f"Status code: {response.status_code}")
         print(f"Content-Type: {response.headers.get('content-type', 'N/A')}")
 
         try:
             content = response.text
-            print(f"\n响应内容 (原始):\n{content}\n")
+            print(f"\nResponse content (raw):\n{content}\n")
 
-            # 尝试解析JSON
+            # Try to parse JSON
             try:
                 json_data = response.json()
-                print(f"响应内容 (格式化JSON):")
+                print(f"Response content (formatted JSON):")
                 print(json.dumps(json_data, indent=2, ensure_ascii=False))
             except json.JSONDecodeError:
-                print("(非JSON格式)")
+                print("(Non-JSON format)")
         except Exception as e:
-            print(f"内容解析失败: {e}")
+            print(f"Content parsing failed: {e}")
 
     def test_stream_request():
-        """测试流式请求"""
+        """Test streaming request"""
         print("\n" + "=" * 80)
-        print("【测试3】流式请求 (POST /v1/models/gemini-2.5-flash:streamGenerateContent)")
+        print("[Test 3] Streaming request (POST /v1/models/gemini-2.5-flash:streamGenerateContent)")
         print("=" * 80)
-        print(f"请求体: {json.dumps(test_request_body, indent=2, ensure_ascii=False)}\n")
+        print(f"Request body: {json.dumps(test_request_body, indent=2, ensure_ascii=False)}\n")
 
-        print("流式响应数据 (每个chunk):")
+        print("Streaming response data (per chunk):")
         print("-" * 80)
 
         with client.stream(
@@ -450,7 +449,7 @@ if __name__ == "__main__":
             json=test_request_body,
             params={"key": test_api_key}
         ) as response:
-            print(f"状态码: {response.status_code}")
+            print(f"Status code: {response.status_code}")
             print(f"Content-Type: {response.headers.get('content-type', 'N/A')}\n")
 
             chunk_count = 0
@@ -458,53 +457,53 @@ if __name__ == "__main__":
                 if chunk:
                     chunk_count += 1
                     print(f"\nChunk #{chunk_count}:")
-                    print(f"  类型: {type(chunk).__name__}")
-                    print(f"  长度: {len(chunk)}")
+                    print(f"  Type: {type(chunk).__name__}")
+                    print(f"  Length: {len(chunk)}")
 
-                    # 解码chunk
+                    # Decode chunk
                     try:
                         chunk_str = chunk.decode('utf-8')
-                        print(f"  内容预览: {repr(chunk_str[:200] if len(chunk_str) > 200 else chunk_str)}")
+                        print(f"  Content preview: {repr(chunk_str[:200] if len(chunk_str) > 200 else chunk_str)}")
 
-                        # 如果是SSE格式，尝试解析每一行
+                        # If SSE format, try to parse each line
                         if chunk_str.startswith("data: "):
-                            # 按行分割，处理每个SSE事件
+                            # Split by lines, process each SSE event
                             for line in chunk_str.strip().split('\n'):
                                 line = line.strip()
                                 if not line:
                                     continue
 
                                 if line == "data: [DONE]":
-                                    print(f"  => 流结束标记")
+                                    print(f"  => Stream end marker")
                                 elif line.startswith("data: "):
                                     try:
-                                        json_str = line[6:]  # 去掉 "data: " 前缀
+                                        json_str = line[6:]  # Strip "data: " prefix
                                         json_data = json.loads(json_str)
-                                        print(f"  解析后的JSON: {json.dumps(json_data, indent=4, ensure_ascii=False)}")
+                                        print(f"  Parsed JSON: {json.dumps(json_data, indent=4, ensure_ascii=False)}")
                                     except Exception as e:
-                                        print(f"  SSE解析失败: {e}")
+                                        print(f"  SSE parsing failed: {e}")
                     except Exception as e:
-                        print(f"  解码失败: {e}")
+                        print(f"  Decoding failed: {e}")
 
-            print(f"\n总共收到 {chunk_count} 个chunk")
+            print(f"\nReceived a total of {chunk_count} chunks")
 
     def test_anti_truncation_stream_request():
-        """测试流式抗截断请求"""
+        """Test streaming anti-truncation request"""
         print("\n" + "=" * 80)
-        print("【测试5】流式抗截断请求 (POST /v1/models/抗截断-gemini-2.5-flash:streamGenerateContent)")
+        print("[Test 5] Streaming anti-truncation request (POST /v1/models/autostitch-gemini-2.5-flash:streamGenerateContent)")
         print("=" * 80)
-        print(f"请求体: {json.dumps(test_request_body, indent=2, ensure_ascii=False)}\n")
+        print(f"Request body: {json.dumps(test_request_body, indent=2, ensure_ascii=False)}\n")
 
-        print("流式抗截断响应数据 (每个chunk):")
+        print("Streaming anti-truncation response data (per chunk):")
         print("-" * 80)
 
         with client.stream(
             "POST",
-            "/v1/models/抗截断-gemini-2.5-flash:streamGenerateContent",
+            "/v1/models/autostitch-gemini-2.5-flash:streamGenerateContent",
             json=test_request_body,
             params={"key": test_api_key}
         ) as response:
-            print(f"状态码: {response.status_code}")
+            print(f"Status code: {response.status_code}")
             print(f"Content-Type: {response.headers.get('content-type', 'N/A')}\n")
 
             chunk_count = 0
@@ -512,51 +511,51 @@ if __name__ == "__main__":
                 if chunk:
                     chunk_count += 1
                     print(f"\nChunk #{chunk_count}:")
-                    print(f"  类型: {type(chunk).__name__}")
-                    print(f"  长度: {len(chunk)}")
+                    print(f"  Type: {type(chunk).__name__}")
+                    print(f"  Length: {len(chunk)}")
 
-                    # 解码chunk
+                    # Decode chunk
                     try:
                         chunk_str = chunk.decode('utf-8')
-                        print(f"  内容预览: {repr(chunk_str[:200] if len(chunk_str) > 200 else chunk_str)}")
+                        print(f"  Content preview: {repr(chunk_str[:200] if len(chunk_str) > 200 else chunk_str)}")
 
-                        # 如果是SSE格式，尝试解析每一行
+                        # If SSE format, try to parse each line
                         if chunk_str.startswith("data: "):
-                            # 按行分割，处理每个SSE事件
+                            # Split by lines, process each SSE event
                             for line in chunk_str.strip().split('\n'):
                                 line = line.strip()
                                 if not line:
                                     continue
 
                                 if line == "data: [DONE]":
-                                    print(f"  => 流结束标记")
+                                    print(f"  => Stream end marker")
                                 elif line.startswith("data: "):
                                     try:
-                                        json_str = line[6:]  # 去掉 "data: " 前缀
+                                        json_str = line[6:]  # Strip "data: " prefix
                                         json_data = json.loads(json_str)
-                                        print(f"  解析后的JSON: {json.dumps(json_data, indent=4, ensure_ascii=False)}")
+                                        print(f"  Parsed JSON: {json.dumps(json_data, indent=4, ensure_ascii=False)}")
                                     except Exception as e:
-                                        print(f"  SSE解析失败: {e}")
+                                        print(f"  SSE parsing failed: {e}")
                     except Exception as e:
-                        print(f"  解码失败: {e}")
+                        print(f"  Decoding failed: {e}")
 
-            print(f"\n总共收到 {chunk_count} 个chunk")
+            print(f"\nReceived a total of {chunk_count} chunks")
 
-    # 运行测试
+    # Run tests
     try:
-        # 测试非流式请求
+        # Test non-streaming request
         test_non_stream_request()
 
-        # 测试流式请求
+        # Test streaming request
         test_stream_request()
 
-        # 测试流式抗截断请求
+        # Test streaming anti-truncation request
         test_anti_truncation_stream_request()
 
         print("\n" + "=" * 80)
-        print("测试完成")
+        print("Tests completed")
         print("=" * 80)
 
     except Exception as e:
-        print(f"\n❌ 测试过程中出现异常: {e}")
+        print(f"\n❌ Exception occurred during test execution: {e}")
         traceback.print_exc()

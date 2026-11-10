@@ -1,12 +1,12 @@
 #!/bin/bash
-# macOS 安装脚本 (支持 Intel 和 Apple Silicon)
+# macOS installation script (Supports Intel and Apple Silicon)
 
-# 确保 Homebrew 已安装
+# Ensure Homebrew is installed
 if ! command -v brew &> /dev/null; then
-    echo "未检测到 Homebrew，开始安装..."
+    echo "Homebrew not detected, starting installation..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     
-    # 检测 Homebrew 安装路径并设置环境变量
+    # Detect Homebrew install path and set environment variables
     if [[ -f "/opt/homebrew/bin/brew" ]]; then
         # Apple Silicon Mac
         eval "$(/opt/homebrew/bin/brew shellenv)"
@@ -16,19 +16,19 @@ if ! command -v brew &> /dev/null; then
     fi
 fi
 
-# 更新 brew 并安装 git
+# Update brew and install git
 brew update
 brew install git
 
-# 安装 uv (Python 环境管理工具)
+# Install uv (Python environment management tool)
 curl -Ls https://astral.sh/uv/install.sh | sh
 
-# 确保 uv 在 PATH 中
+# Ensure uv is in PATH
 export PATH="$HOME/.local/bin:$PATH"
 
-# 克隆或进入项目目录
+# Clone or enter project directory
 if [ -f "./web.py" ]; then
-    # 已经在目标目录
+    # Already in target directory
     :
 elif [ -f "./agy2api/web.py" ]; then
     cd ./agy2api
@@ -37,19 +37,19 @@ else
     cd ./agy2api
 fi
 
-# 拉取最新代码
+# Pull latest code
 git pull
 
-# 创建并同步虚拟环境
+# Create and sync virtual environment
 uv sync
 
-# 激活虚拟环境
+# Activate virtual environment
 if [ -f ".venv/bin/activate" ]; then
     source .venv/bin/activate
 else
-    echo "❌ 未找到虚拟环境，请检查 uv 是否安装成功"
+    echo "❌ Virtual environment not found, please check if uv was installed successfully"
     exit 1
 fi
 
-# 启动项目
+# Start project
 python3 web.py

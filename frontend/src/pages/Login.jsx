@@ -18,7 +18,7 @@ export default function Login({ onSuccess }) {
       localStorage.setItem("panelToken", res.data.token);
       onSuccess();
     } catch (err) {
-      setError(err.response?.data?.detail || "登录失败");
+      setError(err.response?.data?.detail || "Login failed");
     } finally {
       setLoading(false);
     }
@@ -33,12 +33,12 @@ export default function Login({ onSuccess }) {
             <Rocket className="w-10 h-10 text-purple-400" />
           </div>
           <h1 className="text-3xl font-bold text-white">AGY2API</h1>
-          <p className="text-gray-400 mt-2">Antigravity API 代理服务控制面板</p>
+          <p className="text-gray-400 mt-2">Antigravity API Proxy Control Panel</p>
         </div>
 
-        {/* 登录卡片 */}
+        {/* Login Card */}
         <div className="card">
-          <h2 className="text-xl font-semibold mb-6 text-center">登录控制面板</h2>
+          <h2 className="text-xl font-semibold mb-6 text-center">Sign In</h2>
 
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg mb-4">
@@ -49,7 +49,7 @@ export default function Login({ onSuccess }) {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                密码
+                Password
               </label>
               <div className="relative">
                 <input
@@ -57,7 +57,7 @@ export default function Login({ onSuccess }) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-lg text-white placeholder-gray-500 pr-12"
-                  placeholder="请输入控制面板密码"
+                  placeholder="Enter control panel password (e.g. local)"
                   required
                 />
                 <button
@@ -78,7 +78,7 @@ export default function Login({ onSuccess }) {
               {loading ? (
                 <span className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></span>
               ) : (
-                "登录"
+                "Sign In"
               )}
             </button>
           </form>

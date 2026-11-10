@@ -1,10 +1,13 @@
 """
 Main Web Integration - Integrates all routers and modules
-集合router并开启主服务
+Aggregates routers and launches main server
 """
 
 import os
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from log import log
 
 # Import managers and utilities
-# credential_manager 已重构为无状态函数模块（无需初始化/关闭）
+# credential_manager has been refactored into a stateless functional module (no init/close required)
 
 # Import all routers
 from src.router.antigravity.openai import router as antigravity_openai_router
@@ -26,26 +29,26 @@ from src.panel import router as panel_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理"""
-    log.info("启动 AGY2API 主服务")
+    """Application lifespan management."""
+    log.info("Starting AGY2API main service")
 
-    # 初始化配置缓存（优先执行）
+    # Initialize configuration cache (first priority)
     try:
         import config
         await config.init_config()
-        log.info("配置缓存初始化成功")
+        log.info("Configuration cache initialized successfully")
     except Exception as e:
-        log.error(f"配置缓存初始化失败: {e}")
+        log.error(f"Failed to initialize configuration cache: {e}")
 
-    # 预热数据库连接（提前暴露配置问题）
+    # Warm up database connection (expose config issues early)
     try:
         from src.storage.database import get_database
         await get_database()
-        log.info("数据库连接就绪")
+        log.info("Database connection ready")
     except Exception as e:
-        log.error(f"数据库初始化失败: {e}")
+        log.error(f"Failed to initialize database: {e}")
 
-    # 初始化会话凭证缓存（Redis 可选，未配置时使用内存后端）
+    # Initialize session credential cache (Redis optional, falls back to in-memory)
     try:
         import os as os_module
         from src import session_cache
@@ -54,56 +57,56 @@ async def lifespan(app: FastAPI):
         if redis_url:
             await session_cache.init_redis(redis_url)
         else:
-            log.info("未配置 REDIS_URL，会话凭证缓存使用内存后端")
+            log.info("REDIS_URL not configured, using in-memory backend for session cache")
     except Exception as e:
-        log.warning(f"会话凭证缓存初始化失败（使用内存后端）: {e}")
+        log.warning(f"Failed to initialize session cache (falling back to in-memory): {e}")
 
-    # OAuth回调服务器将在需要时按需启动
+    # OAuth callback server starts on demand when needed
 
     yield
 
-    # 清理资源
-    log.info("开始关闭 AGY2API 主服务")
+    # Clean up resources
+    log.info("Shutting down AGY2API main service")
 
-    # 关闭凭证管理器与数据库
+    # Close credential manager and database
     try:
         from src.usage_log import flush_usage_logs
         await flush_usage_logs()
-        log.info("请求日志队列已落库")
+        log.info("Request logs flushed to database")
     except Exception as e:
-        log.error(f"落库请求日志时出错: {e}")
+        log.error(f"Error flushing request logs: {e}")
 
     try:
         from src.storage.database import close_database
         await close_database()
-        log.info("数据库已关闭")
+        log.info("Database closed")
     except Exception as e:
-        log.error(f"关闭数据库时出错: {e}")
+        log.error(f"Error closing database: {e}")
 
-    # 关闭共享 httpx 客户端（释放连接池）
+    # Close shared httpx clients (release connection pool)
     try:
         from src.httpx_client import close_shared_clients
         await close_shared_clients()
-        log.info("HTTP 客户端已关闭")
+        log.info("HTTP client closed")
     except Exception as e:
-        log.error(f"关闭 HTTP 客户端时出错: {e}")
+        log.error(f"Error closing HTTP client: {e}")
 
-    # 关闭会话凭证缓存
+    # Close session credential cache
     try:
         from src import session_cache
         await session_cache.close()
     except Exception as e:
-        log.debug(f"关闭会话缓存时出错: {e}")
+        log.debug(f"Error closing session cache: {e}")
 
-    log.info("AGY2API 主服务已停止")
+    log.info("AGY2API main service stopped")
 
 
 class IPWhitelistMiddleware:
     """
-    IP 白名单中间件（纯 ASGI，覆盖面板与全部 API 路由）
+    IP Whitelist Middleware (pure ASGI, covers panel and all API routes)
 
-    配置 ip_whitelist 非空时，仅允许命中白名单的客户端 IP 访问，
-    其余请求直接返回 403。白名单为空时不做任何限制（热更新即时生效）。
+    When ip_whitelist is non-empty, only whitelisted client IPs are allowed,
+    all other requests return 403. When empty, no restriction is enforced.
     """
 
     def __init__(self, app):
@@ -119,15 +122,15 @@ class IPWhitelistMiddleware:
         try:
             enabled, rules = await config.get_ip_whitelist_rules()
         except Exception as e:
-            # 配置读取失败时放行，避免锁定全部流量
-            log.error(f"读取 IP 白名单配置失败，已放行本次请求: {e}")
+            # Allow request through on config read error to avoid locking out all traffic
+            log.error(f"Failed to read IP whitelist config, request allowed: {e}")
             await self.app(scope, receive, send)
             return
 
         if enabled:
             client_ip = (scope.get("client") or (None, None))[0]
             if not client_ip or not config.ip_in_whitelist(client_ip, rules):
-                log.warning(f"IP 白名单拦截请求: {client_ip} -> {scope.get('path', '')}")
+                log.warning(f"IP whitelist blocked request: {client_ip} -> {scope.get('path', '')}")
                 headers = {k.decode("latin-1"): v.decode("latin-1") for k, v in scope.get("headers", [])}
                 accept = headers.get("accept", "")
                 response: JSONResponse | PlainTextResponse
@@ -146,11 +149,11 @@ class IPWhitelistMiddleware:
 
 class PathPrefixMiddleware:
     """
-    路径前缀剥离中间件（纯 ASGI）
+    Path prefix stripping middleware (pure ASGI)
 
-    反代保留路径前缀时（如 location /AGY2API/ 搭配不带 URI 的 proxy_pass），
-    请求路径形如 /AGY2API/xxx。配置 PATH_PREFIX 后，中间件在路由匹配前
-    剥掉该前缀；未配置时请求原样下发。
+    When reverse proxy retains a path prefix (e.g. location /AGY2API/ with proxy_pass without URI),
+    requests arrive as /AGY2API/xxx. When PATH_PREFIX is configured, this middleware strips
+    the prefix before route matching.
     """
 
     def __init__(self, app, prefix: str):
@@ -170,7 +173,7 @@ class PathPrefixMiddleware:
         await self.app(scope, receive, send)
 
 
-# 创建FastAPI应用
+# Create FastAPI application
 app = FastAPI(
     title="AGY2API",
     description="Antigravity API proxy with OpenAI / Gemini / Claude compatibility",
@@ -178,7 +181,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS中间件
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -187,51 +190,60 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# IP 白名单中间件（先于 CORS 与所有路由执行）
+# IP Whitelist middleware (runs before CORS and all routes)
 app.add_middleware(IPWhitelistMiddleware)
 
-# 路径前缀剥离中间件（配置 PATH_PREFIX 时启用，先于白名单与所有路由执行，
-# 使反代保留前缀的请求按剥掉前缀后的路径匹配路由）
+# Path prefix stripping middleware (enabled when PATH_PREFIX is set)
 path_prefix = os.environ.get("PATH_PREFIX", "").rstrip("/")
 if path_prefix:
     app.add_middleware(PathPrefixMiddleware, prefix=path_prefix)
-    log.info(f"已启用路径前缀剥离: {path_prefix}")
+    log.info(f"Path prefix stripping enabled: {path_prefix}")
 
-# 挂载路由器
-# Antigravity路由 - 处理OpenAI格式请求并转换为Antigravity API
+# Mount routers
+# Antigravity router - handles OpenAI format requests and converts to Antigravity API
 app.include_router(antigravity_openai_router, prefix="", tags=["Antigravity OpenAI API"])
 
-# Antigravity路由 - 处理Gemini格式请求并转换为Antigravity API
+# Antigravity router - handles Gemini format requests and converts to Antigravity API
 app.include_router(antigravity_gemini_router, prefix="", tags=["Antigravity Gemini API"])
 
-# Antigravity模型列表路由 - 处理Gemini格式的模型列表请求
+# Antigravity model list router - handles Gemini format model list requests
 app.include_router(antigravity_model_list_router, prefix="", tags=["Antigravity Model List"])
 
-# Antigravity Anthropic Messages 路由 - Anthropic Messages 格式兼容
+# Antigravity Anthropic Messages router - Anthropic Messages format compatibility
 app.include_router(antigravity_anthropic_router, prefix="", tags=["Antigravity Anthropic Messages"])
 
-# Panel路由 - 包含认证、凭证管理和控制面板功能
+# Panel router - contains authentication, credential management, and control panel features
 app.include_router(panel_router, prefix="", tags=["Panel Interface"])
 
-# 静态文件路由 - 服务docs目录下的文件（目录不存在时跳过）
+# Static files route - serves files under docs directory (skipped if directory does not exist)
 if os.path.isdir("docs"):
     app.mount("/docs", StaticFiles(directory="docs"), name="docs")
 
 
 def main():
-    """主启动函数：uvicorn 直接运行 ASGI 应用"""
+    """Main entrypoint: uvicorn runs ASGI application directly."""
+    import asyncio
     import uvicorn
+    import config
 
-    port = int(os.environ.get("PORT", 7861))
-    host = os.environ.get("HOST", "0.0.0.0")
+    try:
+        asyncio.run(config.init_config())
+        host = os.environ.get("HOST") or asyncio.run(config.get_server_host())
+        port = int(os.environ.get("PORT") or asyncio.run(config.get_server_port()))
+    except Exception:
+        port = int(os.environ.get("PORT", 7861))
+        host = os.environ.get("HOST", "0.0.0.0")
+
     workers = int(os.environ.get("WORKERS", 1))
 
     log.info("=" * 60)
-    log.info("启动 AGY2API")
+    log.info("Starting AGY2API")
     log.info("=" * 60)
-    log.info(f"控制面板: http://127.0.0.1:{port}")
+    log.info(f"Host: {host}")
+    log.info(f"Port: {port}")
+    log.info(f"Control Panel: http://{'127.0.0.1' if host == '0.0.0.0' else host}:{port}")
     if workers > 1:
-        log.info(f"Worker 数量: {workers}")
+        log.info(f"Worker count: {workers}")
     log.info("=" * 60)
 
     uvicorn.run(

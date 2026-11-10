@@ -22,11 +22,11 @@ export default function OAuth() {
     try {
       const res = await api.post("/auth/start", {});
       setAuthUrl(res.data.auth_url);
-      setMessage({ type: "info", text: "已生成认证链接，请在新窗口完成 Google 授权" });
+      setMessage({ type: "info", text: "Auth URL generated! Please complete Google sign-in in the newly opened window." });
     } catch (err) {
       setMessage({
         type: "error",
-        text: err.response?.data?.detail || "获取认证链接失败",
+        text: err.response?.data?.detail || "Failed to generate authorization URL",
       });
     } finally {
       setLoading(false);
@@ -40,12 +40,12 @@ export default function OAuth() {
       setCredsContent(JSON.stringify(res.data.credentials, null, 2));
       setMessage({
         type: "success",
-        text: `认证成功！凭证已保存：${res.data.email || "未知邮箱"}`,
+        text: `Authentication successful! Credentials saved for: ${res.data.email || "Google Account"}`,
       });
     } catch (err) {
       setMessage({
         type: "error",
-        text: err.response?.data?.detail || "获取凭证失败，请确认已完成授权",
+        text: err.response?.data?.detail || "Failed to retrieve credentials. Please verify authorization was completed.",
       });
     } finally {
       setFetching(false);
@@ -54,7 +54,7 @@ export default function OAuth() {
 
   const processCallbackUrl = async () => {
     if (!callbackUrl.trim()) {
-      setMessage({ type: "error", text: "请粘贴完整的回调URL" });
+      setMessage({ type: "error", text: "Please paste the full callback URL" });
       return;
     }
     setFetching(true);
@@ -65,12 +65,12 @@ export default function OAuth() {
       setCredsContent(JSON.stringify(res.data.credentials, null, 2));
       setMessage({
         type: "success",
-        text: `认证成功！凭证已保存：${res.data.email || "未知邮箱"}`,
+        text: `Authentication successful! Credentials saved for: ${res.data.email || "Google Account"}`,
       });
     } catch (err) {
       setMessage({
         type: "error",
-        text: err.response?.data?.detail || "从回调URL获取凭证失败",
+        text: err.response?.data?.detail || "Failed to parse credentials from callback URL",
       });
     } finally {
       setFetching(false);
@@ -95,30 +95,30 @@ export default function OAuth() {
 
   return (
     <div className="space-y-6">
-      {/* 说明卡片 */}
-      <div className="bg-gradient-to-br from-orange-900/30 to-orange-800/10 border border-orange-700/30 rounded-xl p-5">
+      {/* Info Card */}
+      <div className="bg-gradient-to-br from-purple-900/30 to-purple-800/10 border border-purple-700/30 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-2">
-          <Rocket className="w-5 h-5 text-orange-400" />
-          <h3 className="text-lg font-semibold text-orange-400">Antigravity 认证模式</h3>
+          <Rocket className="w-5 h-5 text-purple-400" />
+          <h3 className="text-lg font-semibold text-purple-400">Antigravity OAuth Login</h3>
         </div>
         <p className="text-sm text-gray-400">
-          通过 Google OAuth 获取 Antigravity 凭证。授权成功后系统会自动获取 Project ID
-          和订阅等级，并保存凭证到数据库。
+          Authorize your Google account to grant access to your Antigravity subscription limits. 
+          Upon authorization, the system retrieves your Project ID and subscription tier, automatically storing credentials.
         </p>
       </div>
 
-      {/* 消息提示弹窗 */}
+      {/* Notification Modal */}
       {message && (
         <Modal
           type={message.type}
-          title={message.type === "success" ? "操作成功" : message.type === "error" ? "操作失败" : "提示"}
+          title={message.type === "success" ? "Success" : message.type === "error" ? "Error" : "Notice"}
           onClose={() => setMessage(null)}
         >
           <span className="whitespace-pre-wrap break-all">{message.text}</span>
         </Modal>
       )}
 
-      {/* 获取认证链接按钮 */}
+      {/* Start Button */}
       <button
         onClick={startAuth}
         disabled={loading}
@@ -129,13 +129,13 @@ export default function OAuth() {
         ) : (
           <Rocket size={18} />
         )}
-        获取 Antigravity 认证链接
+        Generate Antigravity Auth Link
       </button>
 
-      {/* 认证链接 */}
+      {/* Auth URL Section */}
       {authUrl && (
         <div className="card space-y-4">
-          <h3 className="font-semibold">认证链接</h3>
+          <h3 className="font-semibold">Authorization Link</h3>
           <div className="bg-dark-800 border border-purple-500/30 rounded-lg p-4 flex items-center justify-between gap-3">
             <a
               href={authUrl}
@@ -143,34 +143,34 @@ export default function OAuth() {
               rel="noopener noreferrer"
               className="text-purple-400 hover:text-purple-300 break-all text-sm flex items-center gap-1"
             >
-              点击此链接进行 Google 认证 <ExternalLink size={14} />
+              Click here to sign in with Google <ExternalLink size={14} />
             </a>
             <button
               onClick={copyUrl}
               className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 flex-shrink-0"
             >
               {copied ? <Check size={14} /> : <Copy size={14} />}
-              {copied ? "已复制" : "复制"}
+              {copied ? "Copied" : "Copy Link"}
             </button>
           </div>
 
           <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-sm text-gray-400">
-            <p className="font-medium text-blue-400 mb-2">使用说明</p>
+            <p className="font-medium text-blue-400 mb-2">Instructions</p>
             <ol className="list-decimal list-inside space-y-1">
-              <li>点击上方认证链接，在新窗口中完成 Google 账号授权</li>
-              <li>授权成功后会跳转到 localhost 显示成功页面</li>
-              <li>关闭 OAuth 窗口，返回本页面</li>
-              <li>点击下方"获取凭证"按钮完成流程</li>
+              <li>Click the link above to log in to your Google Account with the Antigravity subscription.</li>
+              <li>After consenting, your browser will redirect to a localhost callback page.</li>
+              <li>Close the Google OAuth tab and return to this page.</li>
+              <li>Click the <strong>"Save Credentials"</strong> button below to complete setup.</li>
             </ol>
           </div>
 
-          {/* 快捷回调URL */}
+          {/* Fallback Callback URL */}
           <div className="border border-dark-600 rounded-lg">
             <button
               onClick={() => setShowCallbackInput(!showCallbackInput)}
               className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-gray-200"
             >
-              <span>🚀 无法回源？试试快捷方式（粘贴回调URL）</span>
+              <span>🚀 Callback port blocked? Paste callback URL manually</span>
               <ChevronDown
                 size={16}
                 className={`transition-transform ${showCallbackInput ? "rotate-180" : ""}`}
@@ -179,8 +179,7 @@ export default function OAuth() {
             {showCallbackInput && (
               <div className="px-4 pb-4 space-y-3">
                 <p className="text-xs text-gray-500">
-                  适用场景：云服务器/VPS、Docker 容器、防火墙阻止回调端口等。
-                  完成 Google 授权后，复制浏览器地址栏的完整 URL 粘贴到下方。
+                  If the browser fails to reach localhost:11451 after logging in, copy the full URL from the browser's address bar and paste it here:
                 </p>
                 <textarea
                   value={callbackUrl}
@@ -195,33 +194,33 @@ export default function OAuth() {
                   className="btn btn-secondary text-sm flex items-center gap-2 disabled:opacity-50"
                 >
                   {fetching && <Loader2 className="animate-spin" size={14} />}
-                  从回调URL获取凭证
+                  Parse Credentials from URL
                 </button>
               </div>
             )}
           </div>
 
-          {/* 获取凭证按钮 */}
+          {/* Fetch Credentials Button */}
           <button
             onClick={fetchCredentials}
             disabled={fetching}
             className="btn btn-primary flex items-center gap-2 disabled:opacity-50"
           >
             {fetching && <Loader2 className="animate-spin" size={18} />}
-            获取 Antigravity 凭证
+            Save & Activate Credentials
           </button>
         </div>
       )}
 
-      {/* 凭证内容 */}
+      {/* Credentials Output */}
       {credsContent && (
         <div className="card space-y-4">
-          <h3 className="font-semibold">凭证内容</h3>
+          <h3 className="font-semibold">Active Credential Data</h3>
           <pre className="bg-dark-800 border border-dark-600 rounded-lg p-4 text-xs text-gray-300 overflow-x-auto max-h-96 overflow-y-auto">
             {credsContent}
           </pre>
           <button onClick={downloadCreds} className="btn btn-secondary text-sm">
-            下载凭证文件
+            Download JSON File
           </button>
         </div>
       )}

@@ -252,8 +252,8 @@ All models have 1M context window capacity. Each credential file provides 1000 r
 
 
 
-- **Anti-truncation Mode**: Add `抗截断-` prefix to model name
-  - Example: `抗截断-gemini-2.5-pro`
+- **Anti-truncation Mode**: Add `autostitch-` (or legacy `抗截断-`) prefix to model name
+  - Example: `autostitch-gemini-2.5-pro`
   - Uses synthetic tool calls to bypass truncation limits and ensure complete answers (works for both streaming and non-streaming)
 
 ### 🔧 Automatic Model Feature Detection
@@ -621,7 +621,7 @@ Response will include separated thinking content:
 **Anti-truncation Usage**
 ```json
 {
-  "model": "抗截断-gemini-2.5-pro",
+  "model": "autostitch-gemini-2.5-pro",
   "messages": [
     {"role": "user", "content": "Write a long article"}
   ],

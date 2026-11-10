@@ -1,7 +1,7 @@
 """
-数据模型（Pydantic v2）
-- 聊天 API：OpenAI / Gemini / Claude 请求体解析模型
-- 面板 API：登录、认证、凭证操作、配置保存模型
+Data Models (Pydantic v2)
+- Chat API: Request body parsing models for OpenAI / Gemini / Claude
+- Panel API: Models for login, authentication, credential actions, and config saving
 """
 
 from typing import Any, Dict, List, Literal, Optional
@@ -10,11 +10,11 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 
 def model_to_dict(model: BaseModel) -> Dict[str, Any]:
-    """Pydantic 模型 -> dict"""
+    """Pydantic model -> dict"""
     return model.model_dump(exclude_none=True)
 
 
-# ==================== 模型列表 ====================
+# ==================== Model List ====================
 
 class Model(BaseModel):
     id: str
@@ -27,7 +27,7 @@ class ModelList(BaseModel):
     data: List[Model]
 
 
-# ==================== OpenAI 请求 ====================
+# ==================== OpenAI Request ====================
 
 class OpenAIToolFunction(BaseModel):
     name: str
@@ -97,7 +97,7 @@ class OpenAIChatCompletionRequest(BaseModel):
     user: Optional[str] = None
 
 
-# ==================== Gemini 请求 ====================
+# ==================== Gemini Request ====================
 
 class GeminiPart(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -168,7 +168,7 @@ class GeminiRequest(BaseModel):
     sessionId: Optional[str] = None
 
 
-# ==================== Claude 请求 ====================
+# ==================== Claude Request ====================
 
 class ClaudeContentBlock(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -216,7 +216,7 @@ class ClaudeRequest(BaseModel):
     thinking: Optional[Dict[str, Any]] = None
 
 
-# ==================== 面板 API 模型 ====================
+# ==================== Panel API Models ====================
 
 class LoginRequest(BaseModel):
     password: str

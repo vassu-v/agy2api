@@ -1,84 +1,114 @@
 """
 Antigravity Model List Router - Handles model list requests
-Antigravity 模型列表路由 - 处理模型列表请求
 """
 
 import sys
 from pathlib import Path
 
-# 添加项目根目录到Python路径
+# Add project root directory to Python path
 project_root = Path(__file__).resolve().parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# 第三方库
+# Third-party libraries
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-# 本地模块 - 工具和认证
+# Local modules - Utilities and authentication
 from src.utils import (
     get_base_model_from_feature_model,
     authenticate_flexible
 )
 
-# 本地模块 - API
+# Local modules - API
 from src.api.antigravity import fetch_available_models
 
-# 本地模块 - 基础路由工具
+# Local modules - Base router utilities
 from src.router.base_router import create_gemini_model_list, create_openai_model_list
 from src.models import model_to_dict
 from log import log
 
 
-# ==================== 路由器初始化 ====================
+# ==================== Router Initialization ====================
 
 router = APIRouter()
 
 
-# ==================== 辅助函数 ====================
+# ==================== Helper Functions ====================
 
 async def get_antigravity_models_with_features():
     """
-    获取 Antigravity 模型列表并添加功能前缀
+    Get Antigravity model list, add feature prefixes and serving aliases,
+    and filter by visible_models configuration if specified.
     
     Returns:
-        带有功能前缀的模型列表
+        List of models available for serving
     """
-    # 从 API 获取基础模型列表
+    import config
+
+    # Fetch base model list from API
     base_models_data = await fetch_available_models()
     
     if not base_models_data:
-        log.warning("[ANTIGRAVITY MODEL LIST] 无法获取模型列表，返回空列表")
-        return []
+        log.warning("[ANTIGRAVITY MODEL LIST] Unable to fetch model list, returning empty list")
+        base_model_ids = []
+    else:
+        base_model_ids = [model['id'] for model in base_models_data if 'id' in model]
     
-    # 提取模型 ID
-    base_model_ids = [model['id'] for model in base_models_data if 'id' in model]
-    
-    # 添加功能前缀
+    # Add feature prefixes
     models = []
     for base_model in base_model_ids:
-        # 基础模型
+        # Base model
         models.append(base_model)
         
-        # 抗截断模型 (前缀格式)
-        models.append(f"抗截断-{base_model}")
+        # Autostitch model (English prefix format)
+        models.append(f"autostitch-{base_model}")
+
+    # Include custom alias model names from rewrite rules (if simple names without regex tokens)
+    try:
+        rewrite_rules = await config.get_model_rewrite_rules_config()
+        for rule in rewrite_rules:
+            if isinstance(rule, (list, tuple)) and len(rule) == 2:
+                pat = str(rule[0]).strip().lstrip("^").rstrip("$")
+                if pat and not any(c in pat for c in r"*+?[](){}|\."):
+                    if pat not in models:
+                        models.append(pat)
+    except Exception as e:
+        log.debug(f"[ANTIGRAVITY MODEL LIST] Error parsing alias models from rewrite rules: {e}")
+
+    # Filter by visible_models if configured
+    try:
+        visible_models = await config.get_visible_models()
+        if visible_models:
+            filtered = []
+            for m in models:
+                if m in visible_models or any(vm in m for vm in visible_models):
+                    filtered.append(m)
+            # Ensure any model explicitly listed in visible_models is included
+            for vm in visible_models:
+                if vm not in filtered:
+                    filtered.append(vm)
+            log.info(f"[ANTIGRAVITY MODEL LIST] Filtered to {len(filtered)} visible models")
+            return filtered
+    except Exception as e:
+        log.warning(f"[ANTIGRAVITY MODEL LIST] Error filtering visible models: {e}")
     
-    log.info(f"[ANTIGRAVITY MODEL LIST] 生成了 {len(models)} 个模型（包含功能前缀）")
+    log.info(f"[ANTIGRAVITY MODEL LIST] Generated {len(models)} models (including feature prefixes and aliases)")
     return models
 
 
-# ==================== API 路由 ====================
+# ==================== API Routes ====================
 
 @router.get("/v1beta/models")
 async def list_gemini_models(token: str = Depends(authenticate_flexible)):
     """
-    返回 Gemini 格式的模型列表
+    Return model list in Gemini format
     
-    从 src.api.antigravity.fetch_available_models 动态获取模型列表
-    并添加抗截断前缀
+    Dynamically fetches model list from src.api.antigravity.fetch_available_models
+    and adds anti-truncation prefixes
     """
     models = await get_antigravity_models_with_features()
-    log.info("[ANTIGRAVITY MODEL LIST] 返回 Gemini 格式")
+    log.info("[ANTIGRAVITY MODEL LIST] Returning Gemini format")
     return JSONResponse(content=create_gemini_model_list(
         models,
         base_name_extractor=get_base_model_from_feature_model
@@ -88,13 +118,13 @@ async def list_gemini_models(token: str = Depends(authenticate_flexible)):
 @router.get("/v1/models")
 async def list_openai_models(token: str = Depends(authenticate_flexible)):
     """
-    返回 OpenAI 格式的模型列表
+    Return model list in OpenAI format
     
-    从 src.api.antigravity.fetch_available_models 动态获取模型列表
-    并添加抗截断前缀
+    Dynamically fetches model list from src.api.antigravity.fetch_available_models
+    and adds anti-truncation prefixes
     """
     models = await get_antigravity_models_with_features()
-    log.info("[ANTIGRAVITY MODEL LIST] 返回 OpenAI 格式")
+    log.info("[ANTIGRAVITY MODEL LIST] Returning OpenAI format")
     model_list = create_openai_model_list(models, owned_by="google")
     return JSONResponse(content={
         "object": "list",

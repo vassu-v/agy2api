@@ -1,5 +1,5 @@
 """
-版本信息路由模块 - 处理 /version/* 相关的HTTP请求
+Version information route module - Handles HTTP requests related to /version/*
 """
 
 import os
@@ -12,26 +12,26 @@ from log import log
 from src.httpx_client import get_async
 
 
-# 创建路由器
+# Create router
 router = APIRouter(prefix="/version", tags=["version"])
 
 
 @router.get("/info")
 async def get_version_info(check_update: bool = False):
     """
-    获取当前版本信息 - 从version.txt读取
-    可选参数 check_update: 是否检查GitHub上的最新版本
+    Get current version information - Reads from version.txt
+    Optional parameter check_update: Whether to check for the latest version on GitHub
     """
     try:
-        # 获取项目根目录
+        # Get project root directory
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         version_file = os.path.join(project_root, "version.txt")
 
-        # 读取version.txt
+        # Read version.txt
         if not os.path.exists(version_file):
             return JSONResponse({
                 "success": False,
-                "error": "version.txt文件不存在"
+                "error": "version.txt file does not exist"
             })
 
         version_data = {}
@@ -42,11 +42,11 @@ async def get_version_info(check_update: bool = False):
                     key, value = line.split('=', 1)
                     version_data[key] = value
 
-        # 检查必要字段
+        # Check required fields
         if 'short_hash' not in version_data:
             return JSONResponse({
                 "success": False,
-                "error": "version.txt格式错误"
+                "error": "version.txt format error"
             })
 
         response_data = {
@@ -57,17 +57,17 @@ async def get_version_info(check_update: bool = False):
             "date": version_data.get('date', '')
         }
 
-        # 如果需要检查更新
+        # If update check is needed
         if check_update:
             try:
-                # 直接获取GitHub上的version.txt文件
+                # Directly get version.txt file from GitHub
                 github_version_url = "https://raw.githubusercontent.com/su-kaka/agy2api/refs/heads/master/version.txt"
 
-                # 使用统一的httpx客户端
+                # Use unified httpx client
                 resp = await get_async(github_version_url, timeout=10.0)
 
                 if resp.status_code == 200:
-                    # 解析远程version.txt
+                    # Parse remote version.txt
                     remote_version_data = {}
                     for line in resp.text.strip().split('\n'):
                         line = line.strip()
@@ -88,19 +88,19 @@ async def get_version_info(check_update: bool = False):
                     response_data['latest_message'] = remote_version_data.get('message', '')
                     response_data['latest_date'] = remote_version_data.get('date', '')
                 else:
-                    # GitHub获取失败，但不影响基本版本信息
+                    # GitHub fetch failed, but does not affect basic version info
                     response_data['check_update'] = False
-                    response_data['update_error'] = f"GitHub返回错误: {resp.status_code}"
+                    response_data['update_error'] = f"GitHub returned error: {resp.status_code}"
 
             except Exception as e:
-                log.debug(f"检查更新失败: {e}")
+                log.debug(f"Failed to check for updates: {e}")
                 response_data['check_update'] = False
                 response_data['update_error'] = str(e)
 
         return JSONResponse(response_data)
 
     except Exception as e:
-        log.error(f"获取版本信息失败: {e}")
+        log.error(f"Failed to get version info: {e}")
         return JSONResponse({
             "success": False,
             "error": str(e)

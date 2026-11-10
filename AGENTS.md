@@ -1,52 +1,52 @@
 # AGENTS.md
 
-本仓库使用 `uv` 管理依赖(`pyproject.toml` / `uv.lock`)。
+This repository uses `uv` for dependency management (`pyproject.toml` / `uv.lock`).
 
-## Python 环境(重要)
+## Python Environment (Important)
 
-**在执行任何 Python 相关命令(运行、测试、安装依赖等)时,请始终使用 backend 目录下的虚拟环境解释器:**
-
-```bash
-.venv\Scripts\python.exe
-```
-
-例如:
+**When executing any Python-related commands (run, test, install dependencies, etc.), always use the virtual environment interpreter in the project directory:**
 
 ```bash
-# 运行后端
-.venv\Scripts\python.exe web.py
-
-# 安装依赖(优先使用 uv)
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-
-# 查看已安装的包
-.venv\Scripts\python.exe -m pip list
+.venv\Scripts\python.exe # Windows
+# or
+.venv/bin/python # Linux / macOS
 ```
 
-不要使用系统全局的 `python` / `python3`,也不要自行新建虚拟环境。
+For example:
 
-## 前端构建
+```bash
+# Run backend
+.venv/bin/python web.py
 
-前端位于 `frontend/` 目录,使用 `pnpm` 作为包管理器:
+# Install dependencies (uv preferred)
+uv pip install -r requirements.txt
+
+# List installed packages
+uv pip list
+```
+
+Do not use system global `python` / `python3`, and do not create arbitrary new virtual environments.
+
+## Frontend Build
+
+The frontend is located in the `frontend/` directory, using `pnpm` or `npm` as package manager:
 
 ```bash
 cd frontend
-pnpm install
-pnpm build
+pnpm install # or npm install
+pnpm build   # or npm run build
 ```
 
-不要使用 `npm` / `yarn` 或创建 `package-lock.json` / `yarn.lock`。
+## Dependency Import Conventions
 
-## 依赖导入规范
+**All dependency imports (`import` / `from ... import ...`) must be placed at the top of the file (after module docstring, `__future__` imports, and `__all__`).**
 
-**所有依赖导入(`import` / `from ... import ...`)必须统一放在文件顶部(module docstring、`__future__` 导入和 `__all__` 之后)。**
-
-唯一的例外:**存在循环依赖时**,可以在函数/方法内部延迟导入,并在导入语句旁注释说明原因,例如:
+The only exception: **When circular dependencies exist**, delayed local imports inside functions/methods are permitted, with an explanatory comment next to the import statement, e.g.:
 
 ```python
 def some_func():
-    # 循环依赖,延迟导入
+    # Circular dependency, delayed import
     from src.auth import verify_token
 ```
 
-除上述例外,禁止在函数内部、条件分支中随意散落导入语句。
+Except for the above exception, scattering import statements inside arbitrary function bodies or conditional branches is prohibited.

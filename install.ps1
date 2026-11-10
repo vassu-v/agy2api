@@ -1,4 +1,4 @@
-# 检测是否为管理员
+# Check if running as administrator
 $IsElevated = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).
     IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
@@ -8,10 +8,10 @@ if (Get-Command scoop -ErrorAction SilentlyContinue) {
 } else {
     Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
     if ($IsElevated) {
-        # 管理员：使用官方一行命令并传入 -RunAsAdmin
+        # Administrator: use official one-liner and pass -RunAsAdmin
         Invoke-Expression "& {$(Invoke-RestMethod get.scoop.sh)} -RunAsAdmin"
     } else {
-        # 普通用户安装
+        # Standard user installation
         Invoke-WebRequest -useb get.scoop.sh | Invoke-Expression
     }
 }

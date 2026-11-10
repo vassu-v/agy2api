@@ -1,11 +1,11 @@
 ================================================================================  
-GeminiCli API 测试
+GeminiCli API Test
 ================================================================================  
 
 ================================================================================  
-【测试1】流式请求 (stream_request with native=False)
+[Test 1] Streaming Request (stream_request with native=False)
 ================================================================================  
-请求体: {
+Request body: {
   "model": "gemini-2.5-flash",
   "request": {
     "contents": [
@@ -21,20 +21,20 @@ GeminiCli API 测试
   }
 }
 
-流式响应数据 (每个chunk):
+Streaming response data (each chunk):
 --------------------------------------------------------------------------------  
 [2026-01-10 09:55:29] [INFO] SQLite storage initialized at ./creds\credentials.db 
 [2026-01-10 09:55:29] [INFO] Using SQLite storage backend
-[2026-01-10 09:55:31] [INFO] Token刷新成 功并已保存: my-project-9-481103-1765596755.json (mode=geminicli)
-[2026-01-10 09:55:34] [INFO] [DB] 准备commit，总更新行数=1
-[2026-01-10 09:55:34] [INFO] [DB] commit 完成
-[2026-01-10 09:55:34] [INFO] [DB] update_credential_state 结束: success=True, updated_count=1
+[2026-01-10 09:55:31] [INFO] Token refresh successful and saved: my-project-9-481103-1765596755.json (mode=geminicli)
+[2026-01-10 09:55:34] [INFO] [DB] Preparing commit, total updated rows=1
+[2026-01-10 09:55:34] [INFO] [DB] commit complete
+[2026-01-10 09:55:34] [INFO] [DB] update_credential_state finished: success=True, updated_count=1
 
 Chunk #1:
-  类型: str
-  长度: 626
-  内容预览: 'data: {"response": {"candidates": [{"content": {"role": "model","parts": [{"text": "Why did the scarecrow win an award? Because he was outstanding in his field."}]},"finishReason": "STOP"}],"usageMeta'
-  解析后的JSON: {
+  Type: str
+  Length: 626
+  Content preview: 'data: {"response": {"candidates": [{"content": {"role": "model","parts": [{"text": "Why did the scarecrow win an award? Because he was outstanding in his field."}]},"finishReason": "STOP"}],"usageMeta'
+  Parsed JSON: {
     "response": {
         "candidates": [
             {
@@ -76,19 +76,19 @@ Chunk #1:
 }
 
 Chunk #2:
-  类型: str
-  长度: 0
-  内容预览: ''
+  Type: str
+  Length: 0
+  Content preview: ''
 E:\projects\agy2api\src\api\geminicli.py:491: RuntimeWarning: coroutine 'get_auto_ban_error_codes' was never awaited      
   async for chunk in stream_request(body=test_body, native=False):
 RuntimeWarning: Enable tracemalloc to get the object allocation traceback
 
-总共收到 2 个chunk
+Total received: 2 chunks
 
 ================================================================================  
-【测试2】非流式请求 (non_stream_request) 
+[Test 2] Non-streaming Request (non_stream_request) 
 ================================================================================  
-请求体: {
+Request body: {
   "model": "gemini-2.5-flash",
   "request": {
     "contents": [
@@ -104,21 +104,21 @@ RuntimeWarning: Enable tracemalloc to get the object allocation traceback
   }
 }
 
-[2026-01-10 09:55:35] [INFO] Token刷新成 功并已保存: gen-lang-client-0194852792-1767296759.json (mode=geminicli)
-[2026-01-10 09:55:38] [INFO] [DB] 准备commit，总更新行数=1
-[2026-01-10 09:55:38] [INFO] [DB] commit 完成
-[2026-01-10 09:55:38] [INFO] [DB] update_credential_state 结束: success=True, updated_count=1
+[2026-01-10 09:55:35] [INFO] Token refresh successful and saved: gen-lang-client-0194852792-1767296759.json (mode=geminicli)
+[2026-01-10 09:55:38] [INFO] [DB] Preparing commit, total updated rows=1
+[2026-01-10 09:55:38] [INFO] [DB] commit complete
+[2026-01-10 09:55:38] [INFO] [DB] update_credential_state finished: success=True, updated_count=1
 E:\projects\agy2api\src\api\geminicli.py:530: RuntimeWarning: coroutine 'get_auto_ban_error_codes' was never awaited      
   response = await non_stream_request(body=test_body)
 RuntimeWarning: Enable tracemalloc to get the object allocation traceback
-非流式响应数据:
+Non-streaming response data:
 --------------------------------------------------------------------------------  
-状态码: 200
+Status code: 200
 Content-Type: application/json; charset=UTF-8
 
-响应头: {'server': 'openresty', 'date': 'Sat, 10 Jan 2026 01:55:34 GMT', 'content-type': 'application/json; charset=UTF-8', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'x-cloudaicompanion-trace-id': 'bf3a5eb6636774d2', 'vary': 'Origin, X-Origin, Referer', 'content-encoding': 'gzip', 'x-xss-protection': '0', 'x-frame-options': 'SAMEORIGIN', 'x-content-type-options': 'nosniff', 'server-timing': 'gfet4t7; dur=1377', 'alt-svc': 'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS', 'access-control-allow-headers': 'Content-Type, Authorization, X-Requested-With', 'cache-control': 'no-cache', 'content-length': '969'}
+Response headers: {'server': 'openresty', 'date': 'Sat, 10 Jan 2026 01:55:34 GMT', 'content-type': 'application/json; charset=UTF-8', 'transfer-encoding': 'chunked', 'connection': 'keep-alive', 'x-cloudaicompanion-trace-id': 'bf3a5eb6636774d2', 'vary': 'Origin, X-Origin, Referer', 'content-encoding': 'gzip', 'x-xss-protection': '0', 'x-frame-options': 'SAMEORIGIN', 'x-content-type-options': 'nosniff', 'server-timing': 'gfet4t7; dur=1377', 'alt-svc': 'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS', 'access-control-allow-headers': 'Content-Type, Authorization, X-Requested-With', 'cache-control': 'no-cache', 'content-length': '969'}
 
-响应内容 (原始):
+Response content (raw):
 {
   "response": {
     "candidates": [
@@ -162,7 +162,7 @@ Content-Type: application/json; charset=UTF-8
 }
 
 
-响应内容 (格式化JSON):
+Response content (formatted JSON):
 {
   "response": {
     "candidates": [
@@ -206,5 +206,5 @@ Content-Type: application/json; charset=UTF-8
 }
 
 ================================================================================  
-测试完成
+Test Complete
 ================================================================================ 

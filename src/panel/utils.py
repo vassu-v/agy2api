@@ -1,5 +1,5 @@
 """
-Panel 共享工具
+Panel shared utilities
 """
 
 import os
@@ -9,10 +9,10 @@ import config
 
 
 def get_env_locked_keys() -> Set:
-    """获取被环境变量锁定的配置键集合"""
+    """Get the set of configuration keys locked by environment variables."""
     env_locked_keys = set()
 
-    # 使用 config.py 中统一维护的映射表
+    # Use the mapping table centrally maintained in config.py
     for env_key, config_key in config.ENV_MAPPINGS.items():
         if os.getenv(env_key):
             env_locked_keys.add(config_key)

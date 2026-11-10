@@ -4,15 +4,15 @@ import Modal from "../components/Modal";
 import Select from "../components/Select";
 import api from "../api";
 
-// 错误码输入：编辑期间保留原始文本，仅在按键时把已解析的数组回写配置（保证保存时取到最新值），
-// 失焦时再归一化显示。原实现在每次按键即时解析并回写数组，导致分隔符与未成形的中间输入被即时
-// 过滤/截断，无法输入多个错误码，也无法输入小于 100 的中间数字。
+
+
+
 function CsvNumbersField({ value, onChange, placeholder }) {
   const toText = (v) => (Array.isArray(v) ? v.join(", ") : (v ?? ""));
   const [text, setText] = useState(() => toText(value));
   const focusedRef = useRef(false);
 
-  // 仅在非编辑态（失焦）时同步外部配置变化，避免编辑过程中被即时覆盖
+  
   useEffect(() => {
     if (!focusedRef.current) setText(toText(value));
   }, [value]);
@@ -47,16 +47,16 @@ function CsvNumbersField({ value, onChange, placeholder }) {
   );
 }
 
-// 多行文本（敏感词 / IP 白名单等，每行一条）：编辑期间保留原始文本（允许末尾空行与连续回车），
-// 仅在按键时把清洗后的数组回写配置（保证保存时取到最新值），失焦时再归一化显示。
-// 原实现在每次按键即时 split + 过滤空行，末尾按回车产生的新空行被立即移除，
-// 导致"最后一行按回车没反应"、无法换行新增词条。
+
+
+
+
 function LinesField({ value, onChange, placeholder }) {
   const toText = (v) => (Array.isArray(v) ? v.join("\n") : v ?? "");
   const [text, setText] = useState(() => toText(value));
   const focusedRef = useRef(false);
 
-  // 仅在非编辑态（失焦）时同步外部配置变化，避免编辑过程中被即时覆盖
+  
   useEffect(() => {
     if (!focusedRef.current) setText(toText(value));
   }, [value]);
@@ -93,110 +93,131 @@ function LinesField({ value, onChange, placeholder }) {
 
 const CONFIG_GROUPS = [
   {
-    title: "服务器配置",
+    title: "Server Configuration",
     fields: [
-      { key: "host", label: "服务器主机地址", type: "text", note: "服务器监听的主机地址，0.0.0.0表示监听所有接口（重启生效）" },
-      { key: "port", label: "服务器端口", type: "number", note: "服务器监听的端口号（重启生效）" },
-      { key: "api_password", label: "API 访问密码", type: "text", note: "聊天API访问密码，用于 OpenAI / Gemini / Claude 端点认证" },
-      { key: "panel_password", label: "控制面板密码", type: "text", note: "控制面板访问密码" },
+      {
+        key: "host",
+        label: "Server Host (Listen Address)",
+        type: "select",
+        note: "Choose whether the proxy listens locally only or on all network interfaces (restart required).",
+        options: [
+          { value: "0.0.0.0", label: "0.0.0.0 (All Network Interfaces - LAN & Tailscale)" },
+          { value: "127.0.0.1", label: "127.0.0.1 (Local Machine Only)" },
+        ],
+      },
+      { key: "port", label: "Server Port", type: "number", note: "Port number for the server to listen on (restart required)" },
+      { key: "api_password", label: "API Access Password", type: "text", note: "API key password used for OpenAI, Gemini, and Claude endpoint auth" },
+      { key: "panel_password", label: "Control Panel Password", type: "text", note: "Password required to log into the web control panel" },
     ],
   },
   {
-    title: "IP 白名单",
+    title: "IP Whitelist",
     fields: [
-      { key: "ip_whitelist_enabled", label: "启用 IP 白名单", type: "bool", note: "开启后仅白名单内的 IP 可访问面板和 API，其余 IP 直接 403。留空列表或关闭开关则不限制。保存后立即生效（热更新）" },
-      { key: "ip_whitelist", label: "IP 白名单列表", type: "textarea", showIf: (cfg) => !!cfg.ip_whitelist_enabled, note: "每行一条，支持单个 IP、CIDR 网段、起止范围（- 或 ~ 分隔），IPv4 / IPv6 均可", placeholder: "例如：\n127.0.0.1\n192.168.1.0/24\n10.0.0.1-10.0.0.100\n::1\n2001:db8::/32" },
+      { key: "ip_whitelist_enabled", label: "Enable IP Whitelist", type: "bool", note: "When enabled, only whitelisted IPs can access the panel and API (others get 403). Hot-reloaded upon saving." },
+      { key: "ip_whitelist", label: "IP Whitelist List", type: "textarea", showIf: (cfg) => !!cfg.ip_whitelist_enabled, note: "One entry per line. Supports single IPs, CIDR ranges, or start-end ranges (IPv4/IPv6).", placeholder: "Example:\n127.0.0.1\n192.168.1.0/24\n10.0.0.1-10.0.0.100\n::1\n2001:db8::/32" },
     ],
   },
   {
-    title: "基础配置",
+    title: "Basic Configuration",
     fields: [
-      { key: "credentials_dir", label: "凭证目录路径", type: "text", note: "存储认证文件的目录路径" },
-      { key: "proxy", label: "代理设置", type: "text", note: "支持 http/https/socks5/socks5h，可带账号密码（user:pass@host:port），留空不使用（重启生效）", placeholder: "http://user:pass@proxy:port 或 socks5h://proxy:port" },
+      { key: "credentials_dir", label: "Credentials Directory Path", type: "text", note: "Directory path storing credential database and JSON files" },
+      { key: "proxy", label: "Proxy Settings", type: "text", note: "Supports http/https/socks5/socks5h with optional credentials. Leave empty to disable.", placeholder: "http://user:pass@proxy:port or socks5h://proxy:port" },
     ],
   },
   {
-    title: "端点配置",
+    title: "Endpoint Configuration",
     fields: [
-      { key: "oauth_proxy_url", label: "OAuth Endpoint", type: "text", note: "Google OAuth2 端点，用于 token 获取和刷新" },
-      { key: "googleapis_proxy_url", label: "Google APIs Endpoint", type: "text", note: "Google APIs 端点" },
-      { key: "antigravity_api_url", label: "Antigravity API Endpoint", type: "text", note: "Antigravity API 端点" },
+      { key: "oauth_proxy_url", label: "OAuth Endpoint", type: "text", note: "Google OAuth2 endpoint for token acquisition and refresh" },
+      { key: "googleapis_proxy_url", label: "Google APIs Endpoint", type: "text", note: "Google APIs endpoint" },
+      { key: "antigravity_api_url", label: "Antigravity API Endpoint", type: "text", note: "Antigravity API endpoint" },
     ],
   },
   {
-    title: "自动封禁配置",
+    title: "Auto-Ban Configuration",
     fields: [
-      { key: "auto_ban_enabled", label: "启用自动封禁", type: "bool", note: "遇到指定错误码时自动禁用凭证" },
-      { key: "auto_ban_error_codes", label: "自动封禁错误码", type: "text", note: "JSON 数组格式，如 [403, 400]" },
+      { key: "auto_ban_enabled", label: "Enable Auto-Ban", type: "bool", note: "Automatically disable credentials upon receiving specified error codes" },
+      { key: "auto_ban_error_codes", label: "Auto-Ban Error Codes", type: "text", note: "JSON array format, e.g. [403, 400]" },
     ],
   },
   {
-    title: "重试配置",
+    title: "Retry Configuration",
     fields: [
-      { key: "retry_429_enabled", label: "启用错误重试", type: "bool", note: "遇到错误时自动重试" },
-      { key: "retry_429_max_retries", label: "最大重试次数", type: "number", note: "遇到错误时的最大重试次数" },
-      { key: "retry_429_interval", label: "重试间隔（秒）", type: "number", note: "两次重试间的等待秒数，允许 0（立即重试），范围 0-3600" },
+      { key: "retry_429_enabled", label: "Enable Error Retries", type: "bool", note: "Automatically retry requests when errors occur" },
+      { key: "retry_429_max_retries", label: "Max Retry Attempts", type: "number", note: "Maximum retry attempts before returning error" },
+      { key: "retry_429_interval", label: "Retry Interval (Seconds)", type: "number", note: "Wait time in seconds between retries (0 = immediate)" },
     ],
   },
   {
-    title: "凭证选择模式",
+    title: "Credential Selection Mode",
     fields: [
       {
         key: "credential_select_mode",
-        label: "选择模式",
+        label: "Selection Strategy",
         type: "select",
-        note: "决定每次 API 请求如何挑选凭证",
+        note: "Strategy used to select which Google credential serves each incoming request",
         options: [
-          { value: "random", label: "完全随机" },
-          { value: "cache", label: "缓存匹配（推荐）" },
-          { value: "sticky", label: "凭证不变直到 CD" },
+          { value: "random", label: "Completely Random (Round-Robin)" },
+          { value: "cache", label: "Prompt Cache Match (Recommended)" },
+          { value: "sticky", label: "Sticky Until Cooldown (CD)" },
         ],
         descriptions: {
-          random: "完全随机负载均衡：每次请求从可用凭证中随机挑选一个，最均匀地分摊负载，但相同会话可能命中不同凭证，无法利用上游 prompt cache。",
-          cache: "缓存匹配（默认推荐）：以\"模型 + system 指令（或首条 user 消息）\"哈希出会话 key，相同会话始终复用同一凭证——命中 Google 上游的 prompt cache，长对话更快、更省 token。凭证进入 CD 后自动切换并重新绑定。建议搭配 Redis（REDIS_URL）实现多实例共享。",
-          sticky: "凭证粘性：所有请求锁定同一个凭证，直到该凭证进入冷却（CD）或被禁用才切换到下一个。适合最大化单凭证的缓存命中，但负载不均——单凭证扛满全量请求，其余凭证闲置。",
+          random: "Random Load Balancing: Randomly picks an active credential for each request. Evenly distributes traffic but does not maintain session affinity for prompt caching.",
+          cache: "Prompt Cache Matching (Recommended): Hashes model and system prompt into a session key so consecutive turns reuse the same credential, maximizing Google's server-side prompt cache.",
+          sticky: "Sticky Credential: All requests lock to a single credential until it hits cooldown (429) or is disabled. Maximizes cache hits for that account but does not distribute load.",
         },
       },
     ],
   },
   {
-    title: "响应配置",
+    title: "Response Configuration",
     fields: [
-      { key: "return_thoughts_to_frontend", label: "返回思维链到前端", type: "bool", note: "启用后思维链会在响应中返回；禁用后过滤掉" },
+      { key: "return_thoughts_to_frontend", label: "Return Thinking Tokens to Client", type: "bool", note: "Include reasoning / thought tokens in responses (disabled filters them out)" },
     ],
   },
   {
-    title: "抗截断配置",
+    title: "Anti-Truncation Configuration",
     fields: [
-      { key: "anti_truncation_max_attempts", label: "抗截断最大重试次数", type: "number", note: "检测到输出截断时的最大续传尝试次数（1-10）。使用'抗截断-'前缀的模型生效" },
+      { key: "anti_truncation_max_attempts", label: "Anti-Truncation Max Attempts", type: "number", note: "Maximum resume attempts (1-10) when output truncation is detected" },
     ],
   },
   {
-    title: "敏感词过滤",
+    title: "Sensitive Word Filtering",
     fields: [
-      { key: "sensitive_words_enabled", label: "启用敏感词过滤", type: "bool", note: "请求中命中敏感词的内容会被替换为空，避免触发 Google API 端点的敏感词拦截" },
-      { key: "sensitive_words", label: "敏感词列表", type: "textarea", showIf: (cfg) => !!cfg.sensitive_words_enabled, note: "每行一个词或短语，不区分大小写，支持中文。命中后整词替换为空。保存后立即生效（热更新）", placeholder: "例如：\nsensitive word\n敏感词\n另一个词" },
+      { key: "sensitive_words_enabled", label: "Enable Sensitive Word Filter", type: "bool", note: "Filters sensitive words from prompts to prevent upstream blocking" },
+      { key: "sensitive_words", label: "Sensitive Words List", type: "textarea", showIf: (cfg) => !!cfg.sensitive_words_enabled, note: "One word or phrase per line, case-insensitive. Replaces matches with empty strings.", placeholder: "Example:\nsensitive word\nanother phrase" },
     ],
   },
   {
-    title: "模型名复写",
+    title: "Model Serving & Visibility",
     fields: [
-      { key: "model_rewrite_enabled", label: "启用模型名复写", type: "bool", note: "开启后按规则匹配请求中的模型名（支持正则），命中则替换为规则指定的模型名。常用于把客户端固定模型名映射到实际可用的上游模型。保存后立即生效（热更新）" },
+      {
+        key: "visible_models",
+        label: "Models to Show (/v1/models)",
+        type: "textarea",
+        note: "List of model IDs to show in /v1/models and /v1beta/models. Leave empty to automatically show all upstream models. One model ID per line.",
+        placeholder: "Example:\nclaude-sonnet-4-6\nclaude-opus-4-6\ngemini-3.8-flash-high\ngpt-oss-120b-medium",
+      },
+      {
+        key: "model_rewrite_enabled",
+        label: "Enable Model Name Rewriting & Aliasing",
+        type: "bool",
+        note: "Map incoming requested model names to target upstream models for serving. Useful for clients expecting gpt-4o, claude-3-7-sonnet, etc.",
+      },
       {
         key: "model_rewrite_rules",
-        label: "复写规则",
+        label: "Rewrite & Serving Alias Rules",
         type: "rules",
         showIf: (cfg) => !!cfg.model_rewrite_enabled,
-        note: "每行一条规则：匹配正则 + 替换模型名。自上而下首条命中即生效，替换支持正则反向引用（如 \\1）",
+        note: "Incoming regex pattern → Target model name. Matches are replaced in order from top to bottom.",
       },
     ],
   },
   {
-    title: "请求日志",
+    title: "Request Logs",
     fields: [
-      { key: "usage_log_enabled", label: "启用请求日志", type: "bool", note: "记录每次 API 请求（模型、凭证、token 用量、耗时、状态）到数据库，在\"请求日志\"页面查看。日志不自动清理，可在该页面手动清理或清空" },
-      { key: "request_log_enabled", label: "启用请求体详细日志", type: "bool", note: "开启后，当请求命中下方错误码时，把发往上游的完整请求头（已脱敏）与请求体保存为 JSON 文件（data/request_logs/）。主要用于请求体错误时排查 debug；清理/清空日志时会同步删除这些文件" },
-      { key: "request_log_error_codes", label: "详细日志错误码", type: "csv_numbers", showIf: (cfg) => !!cfg.request_log_enabled, note: "仅当最终响应状态码命中此列表时记录详细日志，逗号分隔，如 400, 429。留空默认只记录 400", placeholder: "400, 429" },
+      { key: "usage_log_enabled", label: "Enable Request Logs", type: "bool", note: "Records each API request (model, credential, token usage, latency, status) into the local database." },
+      { key: "request_log_enabled", label: "Enable Detailed Body Logs", type: "bool", note: "Save full request body to disk when specific error codes occur for debugging" },
+      { key: "request_log_error_codes", label: "Detailed Log Error Codes", type: "csv_numbers", showIf: (cfg) => !!cfg.request_log_enabled, note: "Comma-separated status codes to trigger full body logging (e.g. 400, 429)", placeholder: "400, 429" },
     ],
   },
 ];
@@ -220,7 +241,7 @@ export default function Config() {
       setEnvLocked(res.data.env_locked || []);
       if (!silent) setMessage(null);
     } catch (err) {
-      setMessage({ type: "error", text: err.response?.data?.detail || "加载配置失败" });
+      setMessage({ type: "error", text: err.response?.data?.detail || "Failed to load configuration" });
     } finally {
       setLoading(false);
     }
@@ -230,11 +251,11 @@ export default function Config() {
     setSaving(true);
     try {
       const res = await api.post("/config/save", { config });
-      setMessage({ type: "success", text: res.data.message || "配置保存成功" });
-      // 静默刷新配置（不清空刚显示的弹窗消息）
+      setMessage({ type: "success", text: res.data.message || "Configuration saved successfully" });
+      
       await loadConfig({ silent: true });
     } catch (err) {
-      setMessage({ type: "error", text: err.response?.data?.detail || "保存配置失败" });
+      setMessage({ type: "error", text: err.response?.data?.detail || "Failed to save configuration" });
     } finally {
       setSaving(false);
     }
@@ -244,7 +265,7 @@ export default function Config() {
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
 
-  // 一键镜像/官方端点（墙内访问 Google 官方端点的反代方案）
+  // Mirror & Official Endpoint Presets
   const MIRROR_BASE = "https://gcli-api.sukaka.top";
   const OFFICIAL_ENDPOINTS = {
     oauth_proxy_url: "https://oauth2.googleapis.com",
@@ -284,7 +305,7 @@ export default function Config() {
     if (isLocked) {
       return (
         <div className="text-xs text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-          该配置已被环境变量锁定，修改环境变量后重启生效
+          This setting is locked by environment variable. Edit .env and restart to apply.
         </div>
       );
     }
@@ -305,20 +326,24 @@ export default function Config() {
               }`}
             />
           </button>
-          <span className="text-sm text-gray-300">{value ? "已启用" : "已禁用"}</span>
+          <span className="text-sm text-gray-300">{value ? "Enabled" : "Disabled"}</span>
         </label>
       );
     }
 
     if (field.type === "select") {
-      const current = field.options.find((o) => o.value === value) || field.options[0];
+      let options = field.options || [];
+      if (value && !options.some((o) => o.value === value)) {
+        options = [...options, { value, label: `${value} (Custom)` }];
+      }
+      const current = options.find((o) => o.value === value) || options[0];
       return (
         <div className="space-y-2">
           <Select
             value={current?.value ?? ""}
             onChange={(v) => setField(field.key, v)}
-            options={field.options}
-            className="w-full sm:w-64"
+            options={options}
+            className="w-full sm:w-80"
           />
           {field.descriptions && current && (
             <div className="bg-dark-800/60 border border-dark-600 rounded-lg p-3 text-xs sm:text-sm text-gray-300 leading-relaxed">
@@ -354,11 +379,22 @@ export default function Config() {
       const addRule = () => {
         setField(field.key, [...rules, ["", ""]]);
       };
+      const addPresetRules = () => {
+        const presets = [
+          ["^gpt-4o$", "gemini-2.5-pro"],
+          ["^gpt-4o-mini$", "gemini-2.5-flash"],
+          ["^claude-3-7-sonnet.*$", "claude-sonnet-4-6"],
+          ["^claude-3-5-sonnet.*$", "claude-sonnet-4-5"],
+        ];
+        const existingPatterns = new Set(rules.map((r) => r[0]));
+        const toAdd = presets.filter((p) => !existingPatterns.has(p[0]));
+        setField(field.key, [...rules, ...toAdd]);
+      };
       return (
         <div className="space-y-2">
           {rules.length === 0 && (
             <div className="text-xs text-gray-500 bg-dark-800/60 border border-dark-700 rounded-lg px-3 py-2">
-              暂无规则，点击下方按钮新增
+              No rules configured. Click below to add one or use quick presets.
             </div>
           )}
           {rules.map((rule, idx) => (
@@ -367,7 +403,7 @@ export default function Config() {
                 type="text"
                 value={rule[0]}
                 onChange={(e) => updateRule(idx, 0, e.target.value)}
-                placeholder="匹配正则，如 ^gpt-4$"
+                placeholder="Regex match, e.g. ^gpt-4$"
                 className="flex-1 min-w-0 px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-white placeholder-gray-500 font-mono"
               />
               <span className="text-gray-500 text-sm shrink-0">→</span>
@@ -375,27 +411,36 @@ export default function Config() {
                 type="text"
                 value={rule[1]}
                 onChange={(e) => updateRule(idx, 1, e.target.value)}
-                placeholder="替换模型名，如 gemini-2.5-pro"
+                placeholder="Target model, e.g. gemini-2.5-pro"
                 className="flex-1 min-w-0 px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-white placeholder-gray-500 font-mono"
               />
               <button
                 type="button"
                 onClick={() => removeRule(idx)}
                 className="shrink-0 p-2 text-gray-500 hover:text-red-400 transition-colors"
-                title="删除该规则"
+                title="Delete this rule"
               >
                 <Trash2 size={16} />
               </button>
             </div>
           ))}
-          <button
-            type="button"
-            onClick={addRule}
-            className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
-          >
-            <Plus size={14} />
-            新增规则
-          </button>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={addRule}
+              className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
+            >
+              <Plus size={14} />
+              Add Rule
+            </button>
+            <button
+              type="button"
+              onClick={addPresetRules}
+              className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 text-purple-400 border-purple-500/30 hover:border-purple-500/60"
+            >
+              + Add Common Aliases
+            </button>
+          </div>
         </div>
       );
     }
@@ -428,7 +473,7 @@ export default function Config() {
 
   return (
     <div className="space-y-6">
-      {/* 操作按钮（sticky 常驻视口顶部） */}
+      {}
       <div className="sticky top-0 z-30 -mx-1 px-1 py-2 bg-dark-950/95 backdrop-blur border-b border-dark-700 rounded-lg">
         <div className="flex items-center gap-2">
         <button
@@ -437,7 +482,7 @@ export default function Config() {
           className="btn btn-secondary text-sm flex items-center gap-1.5"
         >
           <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
-          刷新配置
+          Reload Configuration
         </button>
         <button
           onClick={saveConfig}
@@ -445,14 +490,14 @@ export default function Config() {
           className="btn btn-primary text-sm flex items-center gap-1.5 disabled:opacity-50"
         >
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-          {saving ? "保存中..." : "保存配置"}
+          {saving ? "Saving..." : "Save Configuration"}
         </button>
         </div>
       </div>
 
-      {/* 消息弹窗 */}
+      {}
       {message && (
-        <Modal type={message.type} title={message.type === "success" ? "操作成功" : "操作失败"} onClose={() => setMessage(null)}>
+        <Modal type={message.type} title={message.type === "success" ? "Success" : "Operation Failed"} onClose={() => setMessage(null)}>
           <span className="whitespace-pre-wrap break-all">{message.text}</span>
         </Modal>
       )}
@@ -469,21 +514,21 @@ export default function Config() {
                 {group.title}
               </h3>
 
-              {group.title === "端点配置" && (
+              {group.title === "Endpoint Configuration" && (
                 <div className="flex flex-wrap gap-2 mb-4">
                   <button
                     type="button"
                     onClick={useMirrorUrls}
                     className="btn btn-secondary text-xs px-3 py-1.5"
                   >
-                    🚀 一键使用镜像网址
+                    🚀 Use Mirror Presets
                   </button>
                   <button
                     type="button"
                     onClick={restoreOfficialUrls}
                     className="btn btn-secondary text-xs px-3 py-1.5"
                   >
-                    🔄 还原官方端点
+                    🔄 Reset to Official Endpoints
                   </button>
                 </div>
               )}

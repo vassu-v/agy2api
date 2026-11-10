@@ -1,6 +1,6 @@
 """
-Base Router - 共用的路由基础功能
-提供模型列表处理、通用响应等共同功能
+Base Router - Shared routing base functionality
+Provides model list processing, common responses, and shared features
 """
 
 from datetime import datetime, timezone
@@ -13,14 +13,14 @@ def create_openai_model_list(
     owned_by: str = "google"
 ) -> ModelList:
     """
-    创建OpenAI格式的模型列表
+    Create an OpenAI-formatted model list
     
     Args:
-        model_ids: 模型ID列表
-        owned_by: 模型所有者
+        model_ids: List of model IDs
+        owned_by: Model owner
         
     Returns:
-        ModelList对象
+        ModelList object
     """
     current_timestamp = int(datetime.now(timezone.utc).timestamp())
     
@@ -42,14 +42,14 @@ def create_gemini_model_list(
     base_name_extractor=None
 ) -> dict:
     """
-    创建Gemini格式的模型列表
+    Create a Gemini-formatted model list
     
     Args:
-        model_ids: 模型ID列表
-        base_name_extractor: 可选的基础模型名提取函数
+        model_ids: List of model IDs
+        base_name_extractor: Optional base model name extractor function
         
     Returns:
-        包含模型列表的字典
+        Dictionary containing the model list
     """
     gemini_models = []
     

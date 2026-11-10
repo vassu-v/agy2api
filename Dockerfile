@@ -6,21 +6,21 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    TZ=Asia/Shanghai
+    TZ=UTC
 
 # Install tzdata, jemalloc and set timezone
-# jemalloc 替代 glibc malloc，大幅减少内存碎片化
+# jemalloc replaces glibc malloc, drastically reducing memory fragmentation
 RUN apt-get update && \
     apt-get install -y --no-install-recommends tzdata libjemalloc2 && \
-    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
-    echo "Asia/Shanghai" > /etc/timezone && \
+    ln -sf /usr/share/zoneinfo/UTC /etc/localtime && \
+    echo "UTC" > /etc/timezone && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# 使用 jemalloc 替代 glibc malloc
-# jemalloc 会主动将空闲内存归还给操作系统，避免 RSS 持续增长
+# Use jemalloc instead of glibc malloc
+# jemalloc actively returns idle memory to the OS, preventing RSS memory growth
 ENV LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
-# jemalloc 配置：启用后台线程回收、脏页衰减时间 5 秒（默认 10 秒）
+# jemalloc config: enable background thread reclamation, 5s dirty decay
 ENV MALLOC_CONF="background_thread:true,dirty_decay_ms:5000,muzzy_decay_ms:5000"
 
 WORKDIR /app
@@ -37,5 +37,5 @@ COPY . .
 # Expose port
 EXPOSE 7861
 
-# 通过 web.py 启动，使 HOST/PORT 环境变量生效
+# Start via web.py, enabling HOST/PORT environment variable configuration
 CMD ["python", "web.py"]
