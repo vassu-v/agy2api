@@ -61,7 +61,7 @@ async def get_version_info(check_update: bool = False):
         if check_update:
             try:
                 # Directly get version.txt file from GitHub
-                github_version_url = "https://raw.githubusercontent.com/su-kaka/agy2api/refs/heads/master/version.txt"
+                github_version_url = "https://raw.githubusercontent.com/vassu-v/agy2api/refs/heads/master/version.txt"
 
                 # Use unified httpx client
                 resp = await get_async(github_version_url, timeout=10.0)

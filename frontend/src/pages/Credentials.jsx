@@ -217,7 +217,7 @@ export default function Credentials() {
         target.remaining += Math.round(minPct * 10) / 10;
         if (!target.resetTime && minResetTime) {
           try {
-            target.resetTime = new Date(minResetTime).toLocaleString("zh-CN");
+            target.resetTime = new Date(minResetTime).toLocaleString();
           } catch {
             target.resetTime = minResetTime;
           }
@@ -494,7 +494,7 @@ export default function Credentials() {
                         </span>
                       ) : (
                         <span className="text-emerald-400 text-xs flex items-center gap-1">
-                          <CheckCircle size={12} /> Enable
+                          <CheckCircle size={12} /> Active
                         </span>
                       )}
                     </div>
@@ -583,7 +583,7 @@ export default function Credentials() {
                         }`}
                       >
                         {cred.disabled ? <CheckCircle size={13} /> : <Ban size={13} />}
-                        {cred.disabled ? "Enable" : "Disabled"}
+                        {cred.disabled ? "Enable" : "Disable"}
                       </button>
                       <button
                         onClick={() => doAction(cred.email, "delete")}

@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   agy2api:
-    image: ghcr.io/su-kaka/agy2api:latest
+    image: ghcr.io/vassu-v/agy2api:latest
     container_name: agy2api
     restart: unless-stopped
     network_mode: host

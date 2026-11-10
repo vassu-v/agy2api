@@ -33,7 +33,7 @@ if [ -f "./web.py" ]; then
 elif [ -f "./agy2api/web.py" ]; then
     cd ./agy2api
 else
-    git clone https://github.com/su-kaka/agy2api.git
+    git clone https://github.com/vassu-v/agy2api.git
     cd ./agy2api
 fi
 

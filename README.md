@@ -1,278 +1,240 @@
 # AGY2API
 
-**将 Google Antigravity 转换为 OpenAI、Gemini 和 Claude API 兼容接口**
+**Convert Google Antigravity to OpenAI, Anthropic Claude, and Gemini API Compatible Interfaces**
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: CNC-1.0](https://img.shields.io/badge/License-CNC--1.0-red.svg)](LICENSE)
-[![Docker](https://img.shields.io/badge/docker-available-blue.svg)](https://github.com/su-kaka/agy2api/pkgs/container/agy2api)
+[![Docker](https://img.shields.io/badge/docker-available-blue.svg)](https://github.com/vassu-v/agy2api/pkgs/container/agy2api)
 
-[English](docs/README_EN.md) | 中文 | [日本語](docs/README_JA.md)
+English | [中文](docs/README_CN.md) | [日本語](docs/README_JA.md)
 
-> **⚠️ 重要变更**：GeminiCLI 端点已被谷歌抛弃，本项目已完全移除 GeminiCLI 相关代码，仅保留 Antigravity 模式。
+> **⚠️ Important Notice**: The legacy GeminiCLI endpoint has been deprecated by Google. All GeminiCLI-specific code has been completely removed; only the Antigravity proxy engine is active and maintained.
 
-## 安装指南
+---
 
-### Termux 环境
+## ⚡ Quick Start & Installation
 
-**初始安装**
+### Termux (Android)
+
+**Initial Installation:**
 ```bash
-curl -o termux-install.sh "https://raw.githubusercontent.com/su-kaka/agy2api/refs/heads/master/termux-install.sh" && chmod +x termux-install.sh && ./termux-install.sh
+curl -o termux-install.sh "https://raw.githubusercontent.com/vassu-v/agy2api/refs/heads/master/termux-install.sh" && chmod +x termux-install.sh && ./termux-install.sh
 ```
 
-**重启服务**
+**Restart Service:**
 ```bash
 cd agy2api
 bash termux-start.sh
 ```
 
-### Windows 环境
+---
 
-**初始安装**
+### Windows
+
+**Initial Installation:**
 ```powershell
-iex (iwr "https://raw.githubusercontent.com/su-kaka/agy2api/refs/heads/master/install.ps1" -UseBasicParsing).Content
+iex (iwr "https://raw.githubusercontent.com/vassu-v/agy2api/refs/heads/master/install.ps1" -UseBasicParsing).Content
 ```
 
-**重启服务**
-双击执行 `start.bat`
+**Restart Service:**
+Double-click `start.bat` or run:
+```powershell
+.\start.bat
+```
 
-### Linux 环境
+---
 
-**初始安装**
+### Linux
+
+**Initial Installation:**
 ```bash
-curl -o install.sh "https://raw.githubusercontent.com/su-kaka/agy2api/refs/heads/master/install.sh" && chmod +x install.sh && ./install.sh
+curl -o install.sh "https://raw.githubusercontent.com/vassu-v/agy2api/refs/heads/master/install.sh" && chmod +x install.sh && ./install.sh
 ```
 
-**重启服务**
-```bash
-cd agy2api
-bash start.sh
-```
-
-### macOS 环境
-
-**初始安装**
-```bash
-curl -o darwin-install.sh "https://raw.githubusercontent.com/su-kaka/agy2api/refs/heads/master/darwin-install.sh" && chmod +x darwin-install.sh && ./darwin-install.sh
-```
-
-**重启服务**
+**Restart Service:**
 ```bash
 cd agy2api
 bash start.sh
 ```
 
-### Docker 环境
+---
 
-**Docker 运行命令**
+### macOS
+
+**Initial Installation:**
 ```bash
-docker run -d --name agy2api --network host -e API_PASSWORD=api_pwd -e PANEL_PASSWORD=panel_pwd -e PORT=7861 -v $(pwd)/data/creds:/app/creds -v $(pwd)/data/request_logs:/app/data/request_logs ghcr.io/su-kaka/agy2api:latest
+curl -o darwin-install.sh "https://raw.githubusercontent.com/vassu-v/agy2api/refs/heads/master/darwin-install.sh" && chmod +x darwin-install.sh && ./darwin-install.sh
 ```
 
-**Docker Compose 运行命令**
-1. 使用仓库中的 `docker-compose.yml`，或参考以下内容：
-    ```yaml
-    version: '3.8'
-
-    services:
-      agy2api:
-        image: ghcr.io/su-kaka/agy2api:latest
-        container_name: agy2api
-        restart: unless-stopped
-        network_mode: host
-        environment:
-          # 密码配置（分离密码）
-          - API_PASSWORD=your_api_password
-          - PANEL_PASSWORD=your_panel_password
-          - PORT=7861
-        volumes:
-          - ./data/creds:/app/creds
-          - ./data/request_logs:/app/data/request_logs
-    ```
-2. 启动服务：
-    ```bash
-    docker-compose up -d
-    ```
-
-## 核心功能
-
-### 🔄 API 端点和格式支持
-
-**Antigravity 多端点多格式支持**
-- **OpenAI 格式端点**：`/v1/chat/completions` 和 `/v1/models`
-- **Gemini 原生端点**：`/v1/models/{model}:generateContent` 和 `streamGenerateContent`
-- **Claude 格式端点**：`/v1/messages`
-- 支持所有 Antigravity 模型（Claude、Gemini 等）
-- 自动模型名称映射和思维模式检测
-- 多种认证方式：Bearer 头部、x-api-key、x-goog-api-key、URL 参数 key
-
-### 📊 智能凭证管理系统
-
-- 多个 Google OAuth 凭证自动轮换（随机负载均衡）
-- 模型级冷却（429 错误自动设置对应模型家族的 CD：argon / gemini / claude+gpt 共享冷却）
-- 自动故障检测和凭证禁用
-- 凭证使用统计和配额/额度查询
-- 批量操作（启用、禁用、删除）
-- 以邮箱为唯一键，重复导入自动覆盖去重
-- 自动获取 Google 账户邮箱地址、订阅等级（Tier）和 Project ID
-
-### 🌊 流式传输和响应处理
-
-- 真正的实时流式响应（SSE）
-- 流式抗截断功能（防止回答被截断，通过"抗截断-"前缀启用）
-- 思维链（Thinking）内容分离
-
-### 🎛️ Web 管理控制台
-
-基于 React + Vite + Tailwind 编译的现代化前端界面：
-- Antigravity OAuth 认证流程（支持回调 URL 快捷方式）
-- 凭证文件上传（JSON/ZIP）、下载、详情查看
-- 凭证导出（规范 JSON：refresh_token/access_token/expiry/email/tier/project_id）
-- 系统配置管理（环境变量锁定提示、热更新）
-- 批量凭证操作和状态筛选、批量导入（缺失字段自动获取）
-- 移动端自适应
-
-## 支持的模型
-
-模型列表从 Antigravity API 动态获取，支持所有 Antigravity 模型：
-
-- **Claude 系列**：`claude-sonnet-4-5`、`claude-opus-4-5` 等
-- **Gemini 系列**：`gemini-2.5-flash`、`gemini-3-flash-preview` 等
-
-**特殊功能变体：**
-- **抗截断模式**：在模型名称前添加 `抗截断-` 前缀
-  - 例：`抗截断-gemini-2.5-pro`
-  - 通过合成工具调用绕过截断限制，确保完整回答（流式和非流式均有效）
-- **图像生成模型**支持分辨率（`-2k`、`-4k`）和比例（`-16x9`、`-9x16` 等）后缀
-
-## 配置说明
-
-1. 访问 `http://127.0.0.1:7861`（默认端口，可通过 PORT 环境变量修改）
-2. 完成 Antigravity OAuth 认证流程（默认密码：`pwd`，可通过环境变量修改）
-3. 配置客户端：
-
-**OpenAI 兼容客户端：**
-- **端点地址**：`http://127.0.0.1:7861/v1`
-- **API 密钥**：`pwd`（默认值，可通过 API_PASSWORD 环境变量修改）
-
-**Gemini 原生客户端：**
-- **端点地址**：`http://127.0.0.1:7861`
-- **认证方式**：`Authorization: Bearer 密钥`、`x-goog-api-key: 密钥` 或 URL 参数 `?key=密钥`
-
-**Claude 客户端：**
-- **端点地址**：`http://127.0.0.1:7861/v1/messages`
-- **认证方式**：`x-api-key: 密钥` 或 `Authorization: Bearer 密钥`
-
-## 💾 数据存储
-
-### 存储后端
-
-| 后端 | 说明 | 启用方式 |
-|------|------|----------|
-| **SQLite**（默认） | 本地文件存储，开箱即用 | 无需配置，数据存储在 `creds/credentials.db` |
-| **PostgreSQL** | 云端分布式存储，多实例部署 | 设置 `POSTGRESQL_URI` 环境变量 |
-
-### 凭证数据结构
-
-凭证以**邮箱（email）为唯一键**存储，字段为结构化数据库列（不再使用 JSON blob）：
-`email`、`access_token`、`refresh_token`、`client_id`、`client_secret`、`project_id`、`expiry`、`tier`
-
-凭证导入/导出使用规范 JSON 格式：`{"refresh_token": "...", "access_token": "...", "expiry": "...", "email": "...", "tier": "...", "project_id": "..."}`（仅 `refresh_token` 必填，`access_token` 未过期时直接复用，其余字段可自动获取）。
-
-### 环境变量配置
-
-**基础配置**
-- `PORT`: 服务端口（默认：7861）
-- `HOST`: 服务器监听地址（默认：0.0.0.0）
-
-**密码配置**
-- `API_PASSWORD`: 聊天 API 访问密码（默认：pwd）
-- `PANEL_PASSWORD`: 控制面板访问密码（默认：pwd）
-
-**访问控制配置**
-- `IP_WHITELIST_ENABLED`: 启用 IP 白名单（默认：false，不限制）
-- `IP_WHITELIST`: IP 白名单列表，逗号或换行分隔（默认：空）。每条支持单个 IP（`192.168.1.1`）、CIDR 网段（`192.168.1.0/24`）、起止范围（`10.0.0.1-10.0.0.100`），IPv4 / IPv6 均可。开启后仅白名单内 IP 可访问面板和 API，其余 IP 直接 403；面板保存后立即生效
-
-**模型名复写配置**
-- `MODEL_REWRITE_ENABLED`: 启用模型名复写（默认：false）
-- `MODEL_REWRITE_RULES`: 复写规则，每条为 `[匹配正则, 替换模型名]`（默认：空）。自上而下首条命中即替换，替换支持正则反向引用（如 `\1`）。例：把 `gpt-4o` 映射到 `gemini-2.5-pro`。面板保存后立即生效
-
-**存储配置**
-- `CREDENTIALS_DIR`: 凭证数据库目录（默认：./creds）
-- `POSTGRESQL_URI`: PostgreSQL 连接字符串（设置后启用 PostgreSQL 模式）
-
-**网络和代理配置**
-- `PROXY`: 代理地址（支持 `http://`、`https://`、`socks5://`、`socks5h://`，可带账号密码 `user:pass@host:port`）
-- `OAUTH_PROXY_URL`: OAuth 认证代理端点
-- `GOOGLEAPIS_PROXY_URL`: Google APIs 代理端点
-- `ANTIGRAVITY_API_URL`: Antigravity API 端点
-- `PATH_PREFIX`: 反代保留路径前缀（如 `/AGY2API`）时配置，由后端在路由匹配前剥掉该前缀；默认：空（不剥离）
-
-**性能和稳定性配置**
-- `RETRY_429_ENABLED`: 启用错误自动重试（默认：true）
-- `RETRY_429_MAX_RETRIES`: 最大重试次数（默认：5）
-- `RETRY_429_INTERVAL`: 重试间隔，秒（默认：1）
-- `ANTI_TRUNCATION_MAX_ATTEMPTS`: 抗截断最大重试次数（默认：3）
-
-**自动化配置**
-- `AUTO_BAN`: 启用凭证自动封禁（默认：false）
-- `AUTO_BAN_ERROR_CODES`: 触发自动封禁的错误码（默认：403）
-
-**响应行为配置**
-- `RETURN_THOUGHTS_TO_FRONTEND`: 返回思维链到前端（默认：true）
-
-**敏感词过滤配置**
-- `SENSITIVE_WORDS_ENABLED`: 启用敏感词过滤（默认：false）
-- `SENSITIVE_WORDS`: 敏感词列表，逗号或换行分隔（默认：空）。命中后整词替换为空，不区分大小写，支持中文，面板保存后立即生效
-
-**请求日志配置**
-- `USAGE_LOG_ENABLED`: 启用请求日志（默认：true）。记录每次 API 请求（模型、凭证、token 用量、耗时、状态）到数据库，不自动清理，可在面板手动清理或清空
-
-**请求体详细日志配置**
-- `REQUEST_LOG_ENABLED`: 启用请求体详细日志（默认：false）。开启后，当请求命中指定错误码时，把发往上游的完整请求头（已脱敏）与请求体保存为 JSON 文件到 `data/request_logs/`，数据库仅记录文件索引，在"请求日志"详情中查看。主要用于请求体错误时排查 debug；清理/清空日志时会同步删除对应文件（Docker 部署请挂载 `./data/request_logs:/app/data/request_logs` 以持久化）
-- `REQUEST_LOG_ERROR_CODES`: 触发详细日志的错误码列表，逗号分隔（默认：400）
-
-**凭证选择模式**
-- `CREDENTIAL_SELECT_MODE`: 凭证选择模式（默认：cache）
-  - `random` — 完全随机负载均衡，每次请求随机挑选凭证
-  - `cache` — 缓存匹配（推荐）：以"模型 + system 指令（或首条 user 消息）"哈希会话 key，相同会话复用同一凭证，命中 Google 上游 prompt cache；凭证 CD 后自动切换并重新绑定
-  - `sticky` — 凭证粘性：所有请求锁定同一凭证，直到其进入 CD 或被禁用
-- `REDIS_URL`: Redis 连接串（可选）。设置后缓存匹配的会话绑定存入 Redis，多实例共享；未设置时使用进程内存后端
-
-**日志配置**
-- `LOG_LEVEL`: 日志级别（DEBUG/INFO/WARNING/ERROR，默认：INFO）
-- `ENABLE_LOG`: 完全静默，不打印任何日志（设为 0 启用静默，默认：1）
-
-## API 使用示例
-
-### OpenAI 格式
-
+**Restart Service:**
 ```bash
-curl -X POST "http://127.0.0.1:7861/v1/chat/completions" \
-  -H "Authorization: Bearer your_api_password" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "claude-sonnet-4-5",
-    "messages": [
-      {"role": "user", "content": "Hello"}
+cd agy2api
+bash start.sh
+```
+
+---
+
+### Docker & Docker Compose
+
+**Direct Docker Run:**
+```bash
+docker run -d \
+  --name agy2api \
+  --network host \
+  -e API_PASSWORD=your_api_password \
+  -e PANEL_PASSWORD=your_panel_password \
+  -e PORT=7861 \
+  -v $(pwd)/data/creds:/app/creds \
+  -v $(pwd)/data/request_logs:/app/data/request_logs \
+  ghcr.io/vassu-v/agy2api:latest
+```
+
+**Docker (macOS / Windows without host networking):**
+```bash
+docker run -d \
+  --name agy2api \
+  -p 7861:7861 \
+  -p 8080:8080 \
+  -e API_PASSWORD=your_api_password \
+  -e PANEL_PASSWORD=your_panel_password \
+  -e PORT=7861 \
+  -v "$(pwd)/data/creds":/app/creds \
+  -v "$(pwd)/data/request_logs":/app/data/request_logs \
+  ghcr.io/vassu-v/agy2api:latest
+```
+
+**Docker Compose:**
+Save the following as `docker-compose.yml`:
+```yaml
+version: '3.8'
+
+services:
+  agy2api:
+    image: ghcr.io/vassu-v/agy2api:latest
+    container_name: agy2api
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - API_PASSWORD=your_api_password
+      - PANEL_PASSWORD=your_panel_password
+      - PORT=7861
+      - HOST=0.0.0.0
+    volumes:
+      - ./data/creds:/app/creds
+      - ./data/request_logs:/app/data/request_logs
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import sys, urllib.request, os; port = os.environ.get('PORT', '7861'); req = urllib.request.Request(f'http://localhost:{port}/v1/models', headers={'Authorization': 'Bearer ' + os.environ.get('API_PASSWORD', 'pwd')}); sys.exit(0 if urllib.request.urlopen(req, timeout=5).getcode() == 200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+```
+
+Launch with:
+```bash
+docker-compose up -d
+```
+
+---
+
+## 🚀 Core Features
+
+### 🔄 Multi-Format API Translation
+* **OpenAI Endpoints**: `/v1/chat/completions` and `/v1/models`
+  * Standard OpenAI messages structure (`system`, `user`, `assistant`, `tool`).
+  * Multimodal input support (text, base64 images, and URL images).
+  * Thinking process separation via `reasoning_content`.
+* **Anthropic Claude Endpoints**: `/v1/messages`
+  * Native Claude format specification (`anthropic-version: 2023-06-01`).
+  * Supports `system` instructions, tool calling, and streaming events (`content_block_delta`).
+* **Google Gemini Native Endpoints**: `/v1/models/{model}:generateContent` and `streamGenerateContent`
+  * Fully compatible with official Google GenAI SDKs and REST formats.
+  * Supports `contents`, `generationConfig`, and image generation parameters.
+
+### 🌐 Network Listen Interface Control
+* Choose where the proxy binds:
+  * `0.0.0.0` — Listen on all network interfaces (LAN, Wi-Fi, Tailscale, VPN, remote devices).
+  * `127.0.0.1` — Listen on local loopback only (secure, accessible only on the current machine).
+* Configurable via the **Web Dashboard** under **Settings** or via the `HOST` environment variable.
+
+### 🎯 Model Serving Whitelist & Visibility
+* Control exactly which models are advertised to clients via `/v1/models`.
+* In the Web Dashboard or via `VISIBLE_MODELS`, provide a whitelist of allowed model identifiers.
+* Protect your client tools from being overwhelmed by models you do not use.
+
+### 🔀 Dynamic Model Rewriting & Serving Aliases
+* Map incoming model names from external tools to target upstream models:
+  * Example: Map `gpt-4o` ➔ `gemini-2.5-pro`
+  * Example: Map `gpt-4o-mini` ➔ `gemini-2.5-flash`
+  * Example: Map `claude-3-7-sonnet` ➔ `claude-sonnet-4-6`
+  * Example: Map `claude-3-5-sonnet` ➔ `claude-sonnet-4-5`
+* Configurable via the **Web Dashboard** with a single click ("+ Add Common Aliases") or via custom regex rules (`MODEL_REWRITE_RULES`).
+* Aliased models are automatically appended to `/v1/models` so client auto-discovery tools (e.g. Cursor, Kimi, OpenCode) can discover them immediately.
+
+### 📊 Intelligent Multi-Account Pool & Cooldowns
+* Load-balances across multiple Google OAuth accounts automatically.
+* Unique email indexing ensures importing the same account refreshes credentials without duplication.
+* Per-family 429 rate-limit tracking: puts only the throttled model family (argon / gemini / claude) into cooldown while keeping other accounts and models active.
+* Prompt-cache affinity (`CREDENTIAL_SELECT_MODE=cache`): Hashes conversation keys so repeated prompts hit Google's prompt cache on the same credential.
+
+### 🛡️ Streaming Anti-Truncation (`autostitch-`)
+* Google Antigravity tokens occasionally truncate output length.
+* Prefix any model name with `autostitch-` (e.g. `autostitch-gemini-2.5-pro`) to automatically continue generating until completion across tool calls and streaming responses.
+
+### 🎛️ Modern Web Management Dashboard
+* Built with React, Vite, and Tailwind CSS.
+* One-click Google OAuth login flow.
+* Credential management (upload JSON/ZIP, view health status, toggle active state, export).
+* Real-time request inspection and debugging log viewer.
+* Live hot-updating settings without restarting the service.
+
+---
+
+## 🤖 Supported Models
+
+Models are dynamically retrieved from the upstream Antigravity engine and include:
+
+| Model Family | Popular Model Identifiers | Description |
+| :--- | :--- | :--- |
+| **Claude** | `claude-sonnet-4-5`, `claude-opus-4-5`, `claude-sonnet-4-6` | Anthropic flagship models routed through Antigravity |
+| **Gemini Pro** | `gemini-2.5-pro`, `gemini-3-pro-preview`, `gemini-3.1-pro-preview` | High-capability reasoning and long-context processing (up to 1M tokens) |
+| **Gemini Flash**| `gemini-2.5-flash`, `gemini-3-flash-preview` | Ultra-fast responses with deep multimodal reasoning |
+| **Image Gen** | `gemini-3.1-flash-image` | Supports aspect ratios (`-16x9`, `-9x16`, `-1x1`, `-21x9`) & resolutions (`-2k`, `-4k`) |
+| **Anti-Truncation** | `autostitch-<model-name>` | Automatically stitches truncated responses together |
+
+---
+
+## 🛠️ Client Integration Guides
+
+### 1. OpenAI SDK (Python)
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://127.0.0.1:7861/v1",
+    api_key="your_api_password"  # Configured via API_PASSWORD (default: pwd)
+)
+
+response = client.chat.completions.create(
+    model="gemini-2.5-pro",
+    messages=[
+        {"role": "system", "content": "You are a helpful coding assistant."},
+        {"role": "user", "content": "Explain async/await in Python with an example."}
     ],
-    "stream": true
-  }'
+    stream=True
+)
+
+for chunk in response:
+    content = chunk.choices[0].delta.content or ""
+    print(content, end="", flush=True)
 ```
 
-### Gemini 原生格式
+---
 
-```bash
-curl -X POST "http://127.0.0.1:7861/v1/models/gemini-2.5-flash:generateContent?key=your_api_password" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "contents": [
-      {"role": "user", "parts": [{"text": "Hello"}]}
-    ]
-  }'
-```
+### 2. Anthropic Claude SDK / Claude Code (CLI)
 
-### Claude 格式
-
+**Using `curl`:**
 ```bash
 curl -X POST "http://127.0.0.1:7861/v1/messages" \
   -H "x-api-key: your_api_password" \
@@ -280,71 +242,160 @@ curl -X POST "http://127.0.0.1:7861/v1/messages" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "claude-sonnet-4-5",
-    "max_tokens": 1024,
+    "max_tokens": 4096,
     "messages": [
-      {"role": "user", "content": "Hello, Claude!"}
+      {"role": "user", "content": "Hello Claude!"}
     ]
   }'
 ```
 
-### 图像生成（Gemini 原生 SDK）
+**Using Claude Code / DSH (`cordis.patch.yml`):**
+```yaml
+env:
+  ANTHROPIC_BASE_URL: "http://127.0.0.1:7861"
+  ANTHROPIC_API_KEY: "pwd"
+```
 
+---
+
+### 3. Google GenAI SDK (Gemini Native)
+
+```python
+from google.genai import Client
+from google.genai.types import HttpOptions
+
+client = Client(
+    api_key="your_api_password",
+    http_options=HttpOptions(base_url="http://127.0.0.1:7861")
+)
+
+response = client.models.generate_content(
+    model="gemini-2.5-flash",
+    contents="Hello Gemini!"
+)
+print(response.text)
+```
+
+**Image Generation (`gemini-3.1-flash-image`):**
 ```python
 from io import BytesIO
 from PIL import Image
 from google.genai import Client
-from google.genai.types import HttpOptions
-from google.genai import types
+from google.genai.types import HttpOptions, GenerateContentConfig, ImageConfig
 
 client = Client(
-    api_key="pwd",
-    http_options=HttpOptions(base_url="http://127.0.0.1:7861"),
+    api_key="your_api_password",
+    http_options=HttpOptions(base_url="http://127.0.0.1:7861")
 )
-
-prompt = "画一只猫"
 
 response = client.models.generate_content(
-    model="gemini-3.1-flash-image",
-    contents=[prompt],
-    config=types.GenerateContentConfig(
-        image_config=types.ImageConfig(
-            aspect_ratio="16:9",
-        )
+    model="gemini-3.1-flash-image-4k-16x9",
+    contents=["A futuristic cyberpunk cityscape at sunset with flying vehicles"],
+    config=GenerateContentConfig(
+        image_config=ImageConfig(aspect_ratio="16:9")
     )
 )
+
 for part in response.candidates[0].content.parts:
-    if part.text is not None:
-        print(part.text)
-    elif part.inline_data is not None:
-        image = Image.open(BytesIO(part.inline_data.data))
-        image.save("generated_image.png")
+    if part.inline_data:
+        img = Image.open(BytesIO(part.inline_data.data))
+        img.save("cityscape.png")
 ```
 
-## 🛠️ 前端开发
+---
 
-控制面板前端源码位于 `frontend/` 目录（React + Vite + Tailwind CSS）：
+### 4. AI Coding Agents Integration
+
+#### **Kimi CLI (`~/.kimi-code/config.toml`)**
+```toml
+default_model = "antigravity/gemini-2.5-pro"
+
+[models."antigravity/gemini-2.5-pro"]
+provider = "antigravity"
+model = "gemini-2.5-pro"
+max_context_tokens = 1000000
+
+[providers.antigravity]
+type = "openai_compatible"
+base_url = "http://127.0.0.1:7861/v1"
+api_key = "pwd"
+```
+
+#### **OpenCode (`opencode.jsonc`)**
+```jsonc
+{
+  "provider": {
+    "antigravity": {
+      "npm": "@ai-sdk/openai",
+      "name": "createOpenAI",
+      "options": {
+        "baseURL": "http://127.0.0.1:7861/v1",
+        "apiKey": "pwd"
+      },
+      "models": {
+        "gemini-2.5-pro": { "name": "Gemini 2.5 Pro" },
+        "claude-sonnet-4-5": { "name": "Claude 3.5 Sonnet" }
+      }
+    }
+  }
+}
+```
+
+---
+
+## ⚙️ Configuration & Environment Variables
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `PORT` | `7861` | Server listening port |
+| `HOST` | `0.0.0.0` | Server listen address (`0.0.0.0` for all interfaces, `127.0.0.1` for local only) |
+| `API_PASSWORD` | `pwd` | Bearer token / API key required for chat completions |
+| `PANEL_PASSWORD` | `pwd` | Password required to access the Web Dashboard |
+| `VISIBLE_MODELS` | *(empty)* | Whitelist of models exposed in `/v1/models` (comma/newline separated; empty = all) |
+| `MODEL_REWRITE_ENABLED`| `false` | Enable/disable incoming model alias rewriting |
+| `MODEL_REWRITE_RULES` | `[]` | JSON list of `[regex_pattern, target_model]` replacement rules |
+| `CREDENTIAL_SELECT_MODE`| `cache` | Account balancing strategy: `cache` (affinity), `random`, or `sticky` |
+| `CREDENTIALS_DIR` | `./creds` | Local directory for storing SQLite credentials database |
+| `POSTGRESQL_URI` | *(empty)* | Optional PostgreSQL connection string for multi-instance cloud deployments |
+| `REDIS_URL` | *(empty)* | Optional Redis URL for shared multi-instance prompt cache affinity |
+| `PROXY` | *(empty)* | HTTP/HTTPS/SOCKS5 outbound proxy (`socks5://user:pass@host:port`) |
+| `RETRY_429_ENABLED` | `true` | Automatically retry rate-limited upstream requests |
+| `RETRY_429_MAX_RETRIES`| `5` | Maximum retry attempts on 429 rate limit |
+| `RETRY_429_INTERVAL` | `1.0` | Initial backoff retry delay in seconds |
+| `ANTI_TRUNCATION_MAX_ATTEMPTS` | `3` | Maximum stitching passes for `autostitch-*` models |
+| `IP_WHITELIST_ENABLED` | `false` | Restrict panel and API access to specified IP ranges |
+| `IP_WHITELIST` | *(empty)* | Comma-separated list of IPs, CIDRs (`192.168.1.0/24`), or IP ranges |
+| `SENSITIVE_WORDS_ENABLED` | `false`| Redact sensitive keywords from prompt inputs |
+| `USAGE_LOG_ENABLED` | `true` | Record request metadata, token counts, and latency to database |
+| `REQUEST_LOG_ENABLED` | `false` | Save full sanitized request headers & bodies for debug status codes |
+| `LOG_LEVEL` | `INFO` | Console log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `ENABLE_LOG` | `1` | Set to `0` for completely silent console output |
+
+---
+
+## 💾 Data Storage
+
+* **SQLite (Default)**: Zero configuration required. Credentials, statistics, and settings are stored locally in `./creds/credentials.db`.
+* **PostgreSQL (Cloud / Distributed)**: Set the `POSTGRESQL_URI` environment variable to connect multiple proxy instances to a shared cloud database.
+
+---
+
+## 🛠️ Frontend Development
+
+The web console source is located in `frontend/` (React + Vite + Tailwind CSS):
 
 ```bash
 cd frontend
 npm install
-npm run dev     # 开发模式，端口 3000，代理后端 API
-npm run build    # 构建到 dist/（生产模式使用）
+npm run dev     # Starts development dev server with hot reload
+npm run build   # Compiles production assets into dist/
 ```
 
-后端直接托管 `dist/` 下编译后的静态文件，无需 Node.js 运行时。
+The Python FastAPI backend serves the compiled static files directly from `dist/`; no Node.js runtime is required in production.
 
-## 💬 交流群
+---
 
-欢迎加入 QQ 群交流讨论！
+## 📄 License & Disclaimer
 
-**QQ 群号：1083250744**
-
-<img src="docs/qq-group.jpg" width="200" alt="QQ 群二维码">
-
-## 许可证与免责声明
-
-本项目仅供学习研究使用，禁止商业用途和倒卖。
-
-## ⚠️ 许可证声明
-
-本项目使用 [CNC-1.0 许可证](LICENSE)（反商业许可证）。
+* **Disclaimer**: This project is developed strictly for educational, testing, and research purposes. Users are responsible for complying with applicable terms of service.
+* **License**: This project is licensed under the **Cooperative Non-Commercial License (CNC-1.0)**. Commercial resale and paid exploitation are strictly prohibited. See [LICENSE](LICENSE) for details.

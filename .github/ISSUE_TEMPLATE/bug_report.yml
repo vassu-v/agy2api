@@ -1,64 +1,64 @@
-name: Bug 报告
-description: 报告项目使用中遇到的问题
+name: Bug Report
+description: Report an issue or bug encountered in AGY2API
 title: "[Bug]: "
-labels: ["bug", "待处理"]
+labels: ["bug", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        ## 感谢你的反馈!
-        请填写以下信息以帮助我们更快定位问题。
+        ## Thank you for your feedback!
+        Please fill out the details below to help us diagnose and resolve the issue quickly.
   
   - type: checkboxes
     id: checklist
     attributes:
-      label: 提交前确认
+      label: Pre-submission Checklist
       options:
-        - label: 我已经搜索过现有的 issues,确认这不是重复问题
+        - label: I have searched existing issues and verified this is not a duplicate.
           required: true
-        - label: 我已经阅读过项目文档
+        - label: I have read the project documentation.
           required: true
   
   - type: dropdown
     id: latest-version
     attributes:
-      label: 是否是最新版
-      description: 请确认你使用的是否是最新版本
+      label: Version Check
+      description: Are you running the latest version of AGY2API?
       options:
-        - 是,使用最新版
-        - 否,使用旧版本
+        - Yes, running the latest version
+        - No, running an older version
     validations:
       required: true
   
   - type: input
     id: model
     attributes:
-      label: 调用的是哪个模型
-      description: 例如 gemini-2.5-flash
-      placeholder: "例如: gemini-2.5-flash"
+      label: Model Used
+      description: E.g., gemini-2.5-flash, claude-sonnet-4-5
+      placeholder: "e.g. gemini-2.5-flash"
     validations:
       required: true
   
   - type: dropdown
     id: format
     attributes:
-      label: 调用的是哪个格式
-      description: 选择你使用的 API 格式
+      label: API Format
+      description: Select the API format being called
       options:
-        - gemini 格式
-        - openai 格式
-        - claude 格式
-        - 其他格式
+        - OpenAI format (/v1/chat/completions)
+        - Gemini format (/v1/models/...:generateContent)
+        - Claude format (/v1/messages)
+        - Other / Unknown
     validations:
       required: true
   
   - type: textarea
     id: error-content
     attributes:
-      label: 具体报错内容
-      description: 请粘贴完整的错误信息或截图
+      label: Error Details / Logs
+      description: Paste full error logs, tracebacks, or output
       placeholder: |
-        请在这里粘贴完整的错误日志或堆栈信息
+        Paste complete error log or stack trace here
       render: shell
     validations:
       required: true
@@ -66,18 +66,18 @@ body:
   - type: textarea
     id: error-description
     attributes:
-      label: 错误描述
-      description: 详细描述问题的发生场景、预期行为和实际行为
+      label: Problem Description
+      description: Describe what you were doing, expected behavior, and actual outcome
       placeholder: |
-        1. 我在做什么操作时遇到了这个问题
-        2. 我期望的结果是...
-        3. 但实际上发生了...
+        1. Steps to reproduce
+        2. Expected behavior
+        3. Actual behavior
     validations:
       required: true
   
   - type: textarea
     id: additional-context
     attributes:
-      label: 补充信息(可选)
-      description: 其他任何有助于解决问题的信息
-      placeholder: 例如:操作系统、Python 版本、相关配置等
+      label: Additional Context (Optional)
+      description: OS, Python version, environment details, or relevant configuration
+      placeholder: "e.g. Linux Ubuntu 22.04, Python 3.12, Docker mode"

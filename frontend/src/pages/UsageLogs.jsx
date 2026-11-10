@@ -222,7 +222,7 @@ export default function UsageLogs() {
             <div className="min-w-0">
               <div className="text-xl font-bold">{formatTokens(stats.total_tokens)}</div>
               <div className="text-xs text-gray-500">
-                Total Tokens{stats.cached_tokens > 0 ? `(Cache ${formatTokens(stats.cached_tokens)}）` : ""}
+                Total Tokens{stats.cached_tokens > 0 ? ` (Cache ${formatTokens(stats.cached_tokens)})` : ""}
               </div>
             </div>
           </div>
@@ -264,7 +264,7 @@ export default function UsageLogs() {
             { value: 24, label: "Last 24 Hours" },
             { value: 24 * 7, label: "Last 7 Days" },
             { value: 24 * 30, label: "Last 30 Days" },
-            { value: 0, label: "AllTimestamp" },
+            { value: 0, label: "All Time" },
           ]}
         />
         <Select
@@ -297,7 +297,7 @@ export default function UsageLogs() {
         <input
           value={statusCodeFilter}
           onChange={(e) => { setStatusCodeFilter(e.target.value); setPage(1); }}
-          placeholder="Error CodesFilter"
+          placeholder="Status code..."
           inputMode="numeric"
           className="w-full sm:w-28 bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-gray-200 text-xs sm:text-sm placeholder-gray-500"
         />

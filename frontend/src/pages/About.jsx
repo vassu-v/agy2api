@@ -55,7 +55,7 @@ export default function About({ version, onCheckUpdate, checkingUpdate }) {
         </p>
         <div className="flex flex-wrap items-center gap-4 mt-4">
           <a
-            href="https://github.com/su-kaka/agy2api"
+            href="https://github.com/vassu-v/agy2api"
             target="_blank"
             rel="noopener noreferrer"
             className="text-purple-400 hover:text-purple-300 text-sm flex items-center gap-1.5"
