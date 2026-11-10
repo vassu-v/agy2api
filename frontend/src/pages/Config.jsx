@@ -265,27 +265,11 @@ export default function Config() {
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
 
-  // Mirror & Official Endpoint Presets
-  const MIRROR_BASE = "https://gcli-api.sukaka.top";
+  // Official Endpoint Presets
   const OFFICIAL_ENDPOINTS = {
     oauth_proxy_url: "https://oauth2.googleapis.com",
     googleapis_proxy_url: "https://www.googleapis.com",
     antigravity_api_url: "https://daily-cloudcode-pa.googleapis.com",
-  };
-  const MIRROR_PATHS = {
-    oauth_proxy_url: "/oauth2",
-    googleapis_proxy_url: "/googleapis",
-    antigravity_api_url: "/daily-cloudcode-pa",
-  };
-
-  const useMirrorUrls = () => {
-    setConfig((prev) => {
-      const next = { ...prev };
-      for (const [key, path] of Object.entries(MIRROR_PATHS)) {
-        if (!envLocked.includes(key)) next[key] = MIRROR_BASE + path;
-      }
-      return next;
-    });
   };
 
   const restoreOfficialUrls = () => {
@@ -518,17 +502,10 @@ export default function Config() {
                 <div className="flex flex-wrap gap-2 mb-4">
                   <button
                     type="button"
-                    onClick={useMirrorUrls}
-                    className="btn btn-secondary text-xs px-3 py-1.5"
-                  >
-                    🚀 Use Mirror Presets
-                  </button>
-                  <button
-                    type="button"
                     onClick={restoreOfficialUrls}
                     className="btn btn-secondary text-xs px-3 py-1.5"
                   >
-                    🔄 Reset to Official Endpoints
+                    🔄 Reset to Official Google Endpoints
                   </button>
                 </div>
               )}
