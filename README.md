@@ -12,6 +12,60 @@ English | [中文](docs/README_CN.md) | [日本語](docs/README_JA.md)
 
 ---
 
+## 🌟 Fork Enhancements & Modifications
+
+This repository is an enhanced, security-audited, and 100% localized fork of `agy2api`. The following key features, architectural improvements, and security enhancements have been added over upstream:
+
+1. **A-to-Z English Localization & Codebase Cleanup**:
+   - Every file across backend Python modules (`src/`, `config.py`, `web.py`, `log.py`), React frontend, CLI scripts (`.sh`, `.bat`, `.ps1`), GitHub issue templates, and documentation has been translated into clean, idiomatic English.
+   - Cleaned up Chinese locale hardcodings (e.g., `zh-CN` timestamp parsing) and fullwidth punctuation artifacts.
+2. **Network Listen Interface Control (`HOST`)**:
+   - Easily toggle whether the server listens on `0.0.0.0` (all network interfaces: LAN, Wi-Fi, Tailscale, remote access) or `127.0.0.1` (local machine loopback only for maximum privacy).
+   - Dynamically configurable from the **Web Dashboard** under **Settings** without requiring manual config file edits, with fallback to the `HOST` environment variable.
+3. **Model Serving & Visibility Controls (`VISIBLE_MODELS`)**:
+   - Filter and whitelist specific models exposed to clients via the `/v1/models` catalog endpoint.
+   - Protects AI coding agents (such as Kimi CLI, Claude Code, Cursor, OpenCode) from getting overwhelmed by unneeded internal models.
+4. **Dynamic Model Name Rewriting & Serving Aliases (`MODEL_REWRITE_RULES`)**:
+   - Define custom regex rewrite rules or use 1-click presets in the Web Dashboard to map external model identifiers directly to upstream models (e.g., `gpt-4o` ➔ `gemini-2.5-pro`, `gpt-4o-mini` ➔ `gemini-2.5-flash`, `claude-3-7-sonnet` ➔ `claude-sonnet-4-6`).
+   - Declared alias models automatically register in `/v1/models` so client auto-discovery tools can discover and select them instantly.
+5. **Security Hardening & Privacy Verification**:
+   - **Zero Data Leaks:** Audited to guarantee zero tracking, user analytics, external CDNs, or third-party pixels.
+   - **Third-Party Mirror Presets Removed:** Purged upstream presets pointing to external Chinese reverse proxies (`sukaka.top`) from the dashboard, enforcing that 100% of OAuth credential exchanges and LLM prompt payloads travel strictly and directly to official Google endpoints (`*.googleapis.com`).
+6. **Cross-Platform Script Support**:
+   - Fully translated and verified Windows PowerShell installer (`install.ps1`) and batch runner (`start.bat`), alongside macOS (`darwin-install.sh`), Linux (`install.sh`), and Android (`termux-install.sh`).
+
+---
+
+## 🏗️ Architecture & Core Request Flow
+
+```
+[Client Applications: Kimi / Claude Code / Cursor / OpenCode / OpenAI SDK]
+                                  │
+                                  ▼
+      ┌────────────────────────────────────────────────────────┐
+      │                 AGY2API PROXY GATEWAY                  │
+      ├────────────────────────────────────────────────────────┤
+      │ 1. Network Interface Binding (127.0.0.1 vs 0.0.0.0)    │
+      │ 2. ASGI IP Whitelist Middleware (Optional CIDR/IPs)    │
+      │ 3. Model Rewrite & Alias Engine (e.g. gpt-4o ➔ pro)    │
+      │ 4. Model Catalog Filter (Exposes whitelisted models)   │
+      │ 5. Session Cache Affinity (Reuses token for cache hits)│
+      │ 6. Multi-Account Pool & Per-Family 429 Cooldown Tracker│
+      │ 7. Anti-Truncation Continuation Engine ('autostitch-') │
+      └────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼ (HTTPS strictly to official Google APIs)
+      ┌────────────────────────────────────────────────────────┐
+      │        Google Cloud Code Backend (googleapis.com)      │
+      └────────────────────────────────────────────────────────┘
+```
+
+### Impact on Core Flow:
+* **Zero Breaking Changes**: Core proxying logic, SSE real-time streaming throughput, token estimation, and Google Antigravity communication protocols remain 100% intact with zero added latency.
+* **Strict HTTPS Privacy**: All payload transmissions bypass third parties and communicate directly with Google's Cloud Code APIs.
+
+---
+
 ## ⚡ Quick Start & Installation
 
 ### Termux (Android)
