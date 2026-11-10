@@ -6,8 +6,6 @@
 [![License: CNC-1.0](https://img.shields.io/badge/License-CNC--1.0-red.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-available-blue.svg)](https://github.com/vassu-v/agy2api/pkgs/container/agy2api)
 
-English | [中文](docs/README_CN.md) | [日本語](docs/README_JA.md)
-
 > **⚠️ Important Notice**: The legacy GeminiCLI endpoint has been deprecated by Google. All GeminiCLI-specific code has been completely removed; only the Antigravity proxy engine is active and maintained.
 
 ---
