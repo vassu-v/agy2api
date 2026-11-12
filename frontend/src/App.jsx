@@ -3,6 +3,7 @@ import {
     Rocket,
     Settings,
     KeyRound,
+    Key,
     Upload,
     Info,
     BarChart3,
@@ -16,6 +17,7 @@ import UploadPage from "./pages/Upload";
 import Config from "./pages/Config";
 import About from "./pages/About";
 import UsageLogs from "./pages/UsageLogs";
+import ApiKeys from "./pages/ApiKeys";
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(() => !!localStorage.getItem("panelToken"));
@@ -51,6 +53,7 @@ export default function App() {
   const tabs = [
     { id: "oauth", label: "OAuth Login", icon: Rocket },
     { id: "credentials", label: "Credentials", icon: KeyRound },
+    { id: "keys", label: "API Keys", icon: Key },
     { id: "upload", label: "Batch Import", icon: Upload },
     { id: "usage-logs", label: "Request Logs", icon: BarChart3 },
     { id: "config", label: "Settings", icon: Settings },
@@ -106,6 +109,7 @@ export default function App() {
       <div className="max-w-6xl mx-auto px-4 py-6">
         {activeTab === "oauth" && <OAuth />}
         {activeTab === "credentials" && <Credentials />}
+        {activeTab === "keys" && <ApiKeys />}
         {activeTab === "upload" && <UploadPage />}
         {activeTab === "usage-logs" && <UsageLogs />}
         {activeTab === "config" && <Config />}

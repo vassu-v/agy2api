@@ -90,6 +90,15 @@ def _enqueue_log(entry: Dict[str, Any]) -> None:
 async def _write_log(entry: Dict[str, Any]) -> None:
     """Log write entry point: enters batch queue after checking configuration toggle."""
     try:
+        # Record usage against API key in api_key_manager
+        key_hash = entry.get("api_key_hash")
+        if key_hash and key_hash != "master":
+            try:
+                from src.api_key_manager import record_api_key_usage
+                record_api_key_usage(key_hash, entry.get("total_tokens", 0) or 0)
+            except Exception as ex:
+                log.debug(f"Failed to record API key usage: {ex}")
+
         if not await config.get_usage_log_enabled():
             return
         _ensure_flush_loop()

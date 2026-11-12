@@ -27,6 +27,7 @@ from src.utils import (
     get_base_model_from_feature_model,
     is_anti_truncation_model,
     authenticate_gemini_flexible,
+    check_model_allowed,
 )
 
 # Local modules - Base router utilities
@@ -84,6 +85,9 @@ async def generate_content(
         response = create_health_check_response(format="gemini")
         return JSONResponse(content=response)
 
+    # Verify model permission for authenticated API key
+    check_model_allowed(request, model)
+
     # Process model name and feature detection
     use_anti_truncation = is_anti_truncation_model(model)
     real_model = get_base_model_from_feature_model(model)
@@ -104,6 +108,7 @@ async def generate_content(
         "request": normalized_dict
     }
 
+    api_key_meta = getattr(request.state, "api_key", {}) if hasattr(request, "state") else {}
     # Call API layer non-streaming request
     response = await non_stream_request(
         body=api_request,
@@ -111,6 +116,8 @@ async def generate_content(
             "api_format": "gemini",
             "client_ip": request.client.host if request.client else "",
             "client_model": model,
+            "api_key_name": api_key_meta.get("name", ""),
+            "api_key_hash": api_key_meta.get("key_hash", ""),
         },
     )
 
@@ -151,6 +158,9 @@ async def stream_generate_content(
     # Convert to dictionary
     normalized_dict = model_to_dict(gemini_request)
 
+    # Verify model permission for authenticated API key
+    check_model_allowed(request, model)
+
     # Process model name and feature detection
     use_anti_truncation = is_anti_truncation_model(model)
     real_model = get_base_model_from_feature_model(model)
@@ -158,11 +168,14 @@ async def stream_generate_content(
     # Update model name to real model name
     normalized_dict["model"] = real_model
 
-    # Request log context (api_format + client IP + original client model name)
+    # Request log context (api_format + client IP + original client model name + API key metadata)
+    api_key_meta = getattr(request.state, "api_key", {}) if hasattr(request, "state") else {}
     log_ctx = {
         "api_format": "gemini",
         "client_ip": request.client.host if request.client else "",
         "client_model": model,
+        "api_key_name": api_key_meta.get("name", ""),
+        "api_key_hash": api_key_meta.get("key_hash", ""),
     }
 
     # ========== Streaming Anti-truncation Generator ==========
@@ -328,6 +341,7 @@ async def stream_generate_content(
 @router.post("/v1/models/{model:path}:countTokens")
 async def count_tokens(
     request: Request = None,
+    model: str = Path(..., description="Model name"),
     api_key: str = Depends(authenticate_gemini_flexible),
 ):
     """
@@ -335,6 +349,8 @@ async def count_tokens(
 
     Uses simple heuristic: approximately 4 characters = 1 token
     """
+    if model:
+        check_model_allowed(request, model)
 
     try:
         request_data = await request.json()

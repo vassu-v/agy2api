@@ -48,6 +48,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.error(f"Failed to initialize database: {e}")
 
+    # Initialize API keys cache and rate limiter
+    try:
+        from src.api_key_manager import init_api_keys
+        await init_api_keys()
+    except Exception as e:
+        log.error(f"Failed to initialize API keys manager: {e}")
+
     # Initialize session credential cache (Redis optional, falls back to in-memory)
     try:
         import os as os_module
@@ -69,6 +76,13 @@ async def lifespan(app: FastAPI):
     log.info("Shutting down AGY2API main service")
 
     # Close credential manager and database
+    try:
+        from src.api_key_manager import flush_api_key_usage
+        await flush_api_key_usage()
+        log.info("API key usage deltas flushed to database")
+    except Exception as e:
+        log.error(f"Error flushing API key usage deltas: {e}")
+
     try:
         from src.usage_log import flush_usage_logs
         await flush_usage_logs()

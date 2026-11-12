@@ -5,6 +5,7 @@ Credentials use email as the unique key; schema changes do not maintain backward
 """
 
 import asyncio
+import hashlib
 import json
 import os
 import random
@@ -13,6 +14,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Float,
     Index,
@@ -117,9 +119,47 @@ class UsageLog(Base):
     # Request body detail log file index (relative path to data/request_logs; empty=not logged)
     request_log_file: Mapped[str] = mapped_column(String(512), default="")
 
+    # Authenticated API Key name or identifier
+    api_key_name: Mapped[str] = mapped_column(String(128), default="")
+
     __table_args__ = (
         Index("idx_ul_created_model", "created_at", "model_name"),
         Index("idx_ul_created_email", "created_at", "credential_email"),
+        Index("idx_ul_api_key_name", "api_key_name"),
+    )
+
+
+class ApiKey(Base):
+    """API Keys management table for multi-key authentication, rate limiting and quotas"""
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    key_prefix: Mapped[str] = mapped_column(String(32), default="")
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Rate limiting & quotas (0 = unlimited)
+    rpm_limit: Mapped[int] = mapped_column(Integer, default=0)           # Requests per minute
+    daily_limit: Mapped[int] = mapped_column(Integer, default=0)         # Requests per day
+    token_limit: Mapped[int] = mapped_column(BigInteger, default=0)      # Total lifetime token quota
+
+    # Model restrictions (JSON array of allowed model names, empty/[] means all models allowed)
+    models_allowed: Mapped[str] = mapped_column(Text, default="[]")
+
+    # Timestamps
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    expires_at: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # None = never expires
+    last_used_at: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Cumulative usage statistics (using BigInteger to prevent 2.1B overflow)
+    total_requests: Mapped[int] = mapped_column(BigInteger, default=0)
+    total_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
+
+    __table_args__ = (
+        Index("idx_api_key_active", "is_active"),
     )
 
 
@@ -136,6 +176,28 @@ def _load_json(raw: Optional[str], default: Any) -> Any:
         return json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return default
+
+
+def _api_key_to_dict(r: ApiKey) -> Dict[str, Any]:
+    """Helper: serialize ApiKey ORM model to dictionary."""
+    return {
+        "id": r.id,
+        "key": r.key,
+        "key_hash": r.key_hash,
+        "key_prefix": r.key_prefix or "",
+        "name": r.name,
+        "description": r.description or "",
+        "is_active": r.is_active,
+        "rpm_limit": r.rpm_limit,
+        "daily_limit": r.daily_limit,
+        "token_limit": r.token_limit,
+        "models_allowed": _load_json(r.models_allowed, []),
+        "created_at": r.created_at,
+        "expires_at": r.expires_at,
+        "last_used_at": r.last_used_at,
+        "total_requests": r.total_requests,
+        "total_tokens": r.total_tokens,
+    }
 
 
 def _row_to_credential_dict(row: AntigravityCredential) -> Dict[str, Any]:
@@ -266,7 +328,7 @@ class Database:
                 sync_conn.execute(text(f"DROP TABLE {table_name}"))
 
         # Add missing columns for existing tables (ALTER TABLE ADD COLUMN, preserving data)
-        for orm_model in (UsageLog,):
+        for orm_model in (UsageLog, ApiKey):
             table = orm_model.__table__
             if not inspector.has_table(table.name):
                 continue
@@ -789,6 +851,7 @@ class Database:
                     completion_tokens=int(entry.get("completion_tokens", 0) or 0),
                     total_tokens=int(entry.get("total_tokens", 0) or 0),
                     cached_tokens=int(entry.get("cached_tokens", 0) or 0),
+                    api_key_name=str(entry.get("api_key_name", "")),
                     error_message=str(entry.get("error_message", ""))[:2000],
                     request_log_file=str(entry.get("request_log_file", ""))[:512],
                 ))
@@ -874,6 +937,7 @@ class Database:
                 "completion_tokens": r.completion_tokens,
                 "total_tokens": r.total_tokens,
                 "cached_tokens": r.cached_tokens or 0,
+                "api_key_name": r.api_key_name or "",
                 "error_message": r.error_message or "",
                 "request_log_file": r.request_log_file or "",
             }
@@ -953,6 +1017,125 @@ class Database:
                 {"ts": before_timestamp},
             )
             return result.rowcount or 0
+
+    # ---------- API Key Management ----------
+
+    async def list_api_keys(self) -> List[Dict[str, Any]]:
+        """List all API keys ordered by newest first"""
+        async with self.session() as s:
+            result = await s.execute(select(ApiKey).order_by(ApiKey.created_at.desc()))
+            rows = result.scalars().all()
+            return [_api_key_to_dict(r) for r in rows]
+
+    async def get_api_key_by_hash(self, key_hash: str) -> Optional[Dict[str, Any]]:
+        """Look up an API key by its SHA-256 hash"""
+        async with self.session() as s:
+            result = await s.execute(select(ApiKey).where(ApiKey.key_hash == key_hash))
+            r = result.scalar_one_or_none()
+            return _api_key_to_dict(r) if r else None
+
+    async def get_api_key_by_id(self, key_id: int) -> Optional[Dict[str, Any]]:
+        """Look up an API key by ID"""
+        async with self.session() as s:
+            result = await s.execute(select(ApiKey).where(ApiKey.id == key_id))
+            r = result.scalar_one_or_none()
+            return _api_key_to_dict(r) if r else None
+
+    async def create_api_key(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new API key record"""
+        key_str = str(data["key"]).strip()
+        key_hash = hashlib.sha256(key_str.encode("utf-8")).hexdigest()
+        key_prefix = f"{key_str[:8]}...{key_str[-4:]}" if len(key_str) > 12 else key_str[:8]
+        models_allowed = data.get("models_allowed", [])
+        if isinstance(models_allowed, list):
+            models_allowed_str = _dump_json(models_allowed)
+        else:
+            models_allowed_str = str(models_allowed)
+
+        row = ApiKey(
+            key=key_str,
+            key_hash=key_hash,
+            key_prefix=key_prefix,
+            name=str(data["name"]).strip(),
+            description=str(data.get("description", "")).strip(),
+            is_active=bool(data.get("is_active", True)),
+            rpm_limit=int(data.get("rpm_limit", 0) or 0),
+            daily_limit=int(data.get("daily_limit", 0) or 0),
+            token_limit=int(data.get("token_limit", 0) or 0),
+            models_allowed=models_allowed_str,
+            created_at=float(data.get("created_at") or time.time()),
+            expires_at=float(data["expires_at"]) if data.get("expires_at") else None,
+            last_used_at=None,
+            total_requests=0,
+            total_tokens=0,
+        )
+        async with self.session() as s:
+            s.add(row)
+            await s.commit()
+            await s.refresh(row)
+            return _api_key_to_dict(row)
+
+    async def update_api_key(self, key_id: int, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update an existing API key record"""
+        async with self.session() as s:
+            result = await s.execute(select(ApiKey).where(ApiKey.id == key_id))
+            row = result.scalar_one_or_none()
+            if not row:
+                return None
+
+            if "name" in updates:
+                row.name = str(updates["name"]).strip()
+            if "description" in updates:
+                row.description = str(updates["description"]).strip()
+            if "is_active" in updates:
+                row.is_active = bool(updates["is_active"])
+            if "rpm_limit" in updates:
+                row.rpm_limit = int(updates["rpm_limit"] or 0)
+            if "daily_limit" in updates:
+                row.daily_limit = int(updates["daily_limit"] or 0)
+            if "token_limit" in updates:
+                row.token_limit = int(updates["token_limit"] or 0)
+            if "expires_at" in updates:
+                val = updates["expires_at"]
+                row.expires_at = float(val) if val else None
+            if "models_allowed" in updates:
+                m = updates["models_allowed"]
+                row.models_allowed = _dump_json(m) if isinstance(m, list) else str(m)
+
+            await s.commit()
+            await s.refresh(row)
+            return _api_key_to_dict(row)
+
+    async def delete_api_key(self, key_id: int) -> bool:
+        """Delete an API key by ID"""
+        async with self.session() as s:
+            result = await s.execute(select(ApiKey).where(ApiKey.id == key_id))
+            row = result.scalar_one_or_none()
+            if not row:
+                return False
+            await s.delete(row)
+            await s.commit()
+            return True
+
+    async def increment_api_key_usage(self, key_hash: str, req_delta: int = 1, token_delta: int = 0) -> None:
+        """Atomically increment request and token delta counters for an API key"""
+        async with self.session() as s:
+            await s.execute(
+                text(
+                    "UPDATE api_keys SET "
+                    "total_requests = total_requests + :req_delta, "
+                    "total_tokens = total_tokens + :token_delta, "
+                    "last_used_at = :now "
+                    "WHERE key_hash = :key_hash"
+                ),
+                {
+                    "req_delta": max(0, req_delta),
+                    "token_delta": max(0, token_delta),
+                    "now": time.time(),
+                    "key_hash": key_hash,
+                },
+            )
+            await s.commit()
 
     # ---------- Backend Information ----------
 

@@ -27,6 +27,7 @@ from src.utils import (
     get_base_model_from_feature_model,
     is_anti_truncation_model,
     authenticate_bearer,
+    check_model_allowed,
 )
 
 # Local modules - Base router utilities
@@ -86,6 +87,9 @@ async def chat_completions(
         response = create_health_check_response(format="openai")
         return JSONResponse(content=response)
 
+    # Verify model permission for authenticated API key
+    check_model_allowed(request, openai_request.model)
+
     # Process model name and feature detection
     use_anti_truncation = is_anti_truncation_model(openai_request.model)
     real_model = get_base_model_from_feature_model(openai_request.model)
@@ -126,11 +130,14 @@ async def chat_completions(
         "request": gemini_dict
     }
 
-    # Request log context (api_format + client IP + original client model name)
+    # Request log context (api_format + client IP + original client model name + API key metadata)
+    api_key_meta = getattr(request.state, "api_key", {}) if hasattr(request, "state") else {}
     log_ctx = {
         "api_format": "openai",
         "client_ip": request.client.host if request.client else "",
         "client_model": openai_request.model,
+        "api_key_name": api_key_meta.get("name", ""),
+        "api_key_hash": api_key_meta.get("key_hash", ""),
     }
 
     # ========== Non-streaming Request ==========

@@ -1,3 +1,4 @@
+import hmac
 from typing import Optional
 
 import httpx
@@ -190,15 +191,62 @@ async def authenticate_flexible(
         )
     
     # Verify token
-    if token != password:
-        log.debug(f"Authentication failed using {auth_method}")
+    # 1. Master password comparison using hmac.compare_digest on byte encodings
+    if password:
+        try:
+            if hmac.compare_digest(str(token).encode("utf-8"), str(password).encode("utf-8")):
+                if hasattr(request, "state"):
+                    request.state.api_key = {
+                        "name": "Master Key",
+                        "is_admin": True,
+                        "key_hash": "master",
+                    }
+                log.debug(f"Master authentication successful using {auth_method}")
+                return token
+        except Exception:
+            pass
+
+    # 2. Check generated API Keys via api_key_manager
+    try:
+        from src.api_key_manager import validate_api_key
+        key_info = validate_api_key(token)
+        if hasattr(request, "state"):
+            request.state.api_key = {
+                "id": key_info["id"],
+                "name": key_info["name"],
+                "key_hash": key_info["key_hash"],
+                "models_allowed": key_info.get("models_allowed", []),
+                "is_admin": False,
+            }
+        log.debug(f"API key authentication successful ('{key_info['name']}') using {auth_method}")
+        return token
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.debug(f"Authentication failed using {auth_method}: {e}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Incorrect password"
+            detail="Incorrect password or invalid API key"
         )
-    
-    log.debug(f"Authentication successful using {auth_method}")
-    return token
+
+
+def check_model_allowed(request: Request, model_name: str) -> None:
+    """Enforce model permission restriction for the authenticated API key."""
+    if not hasattr(request, "state"):
+        return
+    api_key = getattr(request.state, "api_key", None)
+    if not api_key or api_key.get("is_admin", False):
+        return
+    allowed = api_key.get("models_allowed", [])
+    if not allowed:
+        return
+    base = get_base_model_from_feature_model(model_name).lower()
+    allowed_norm = [m.lower().strip() for m in allowed if m.strip()]
+    if allowed_norm and base not in allowed_norm and model_name.lower() not in allowed_norm:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Model '{model_name}' is not permitted for this API key",
+        )
 
 
 # Backward compatibility aliases
@@ -209,8 +257,16 @@ authenticate_gemini_flexible = authenticate_flexible
 # ====================== Panel Authentication Functions ======================
 
 async def verify_panel_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
-    """Verify panel bearer token against panel password."""
+    """Verify panel bearer token against panel password using constant-time byte comparison."""
     password = await get_panel_password()
-    if credentials.credentials != password:
+    try:
+        if not hmac.compare_digest(
+            str(credentials.credentials).encode("utf-8"),
+            str(password).encode("utf-8")
+        ):
+            raise HTTPException(status_code=401, detail="Incorrect password")
+    except HTTPException:
+        raise
+    except Exception:
         raise HTTPException(status_code=401, detail="Incorrect password")
     return credentials.credentials

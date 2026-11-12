@@ -259,6 +259,8 @@ def _base_log_entry(
         "upstream_model_name": model_name,
         "credential_email": email,
         "is_stream": is_stream,
+        "api_key_name": ctx.get("api_key_name", ""),
+        "api_key_hash": ctx.get("api_key_hash", ""),
     }
 
 

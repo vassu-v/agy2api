@@ -31,6 +31,13 @@ This repository is an enhanced, security-audited, and 100% localized fork of `ag
    - **Third-Party Mirror Presets Removed:** Purged upstream presets pointing to external Chinese reverse proxies (`sukaka.top`) from the dashboard, enforcing that 100% of OAuth credential exchanges and LLM prompt payloads travel strictly and directly to official Google endpoints (`*.googleapis.com`).
 6. **Cross-Platform Script Support**:
    - Fully translated and verified Windows PowerShell installer (`install.ps1`) and batch runner (`start.bat`), alongside macOS (`darwin-install.sh`), Linux (`install.sh`), and Android (`termux-install.sh`).
+7. **Multi-API Key Generation & Rate Limiting System**:
+   - Generate dedicated client API keys (e.g. for Cursor, Claude Code, OpenCode, team members) with cryptographically secure 256-bit entropy (`sk-agy-...`) or custom tokens.
+   - **Dedicated Web UI Tab:** Full "API Keys" dashboard tab with live summary stats (total keys, active keys, total requests, tokens consumed), 1-click copy, and masked key reveal.
+   - **High-Performance In-Memory Rate Limiting:** Sliding 60-second window for Requests Per Minute (RPM), O(1) memory daily request limits, and lifetime token quotas with standard 429 response headers (`Retry-After`, `X-RateLimit-*`).
+   - **Model Access Control Whitelisting:** Restrict specific API keys to authorized models only (e.g. restrict a key strictly to `gemini-2.5-flash`).
+   - **Non-blocking Usage Accounting:** Asynchronously aggregates request counts and token usage across both streaming SSE and non-streaming responses, writing atomic deltas to the database in batches.
+   - **Master Key Backward Compatibility:** The root `API_PASSWORD` in `.env` continues to work seamlessly as the admin master key with unlimited throughput.
 
 ---
 
