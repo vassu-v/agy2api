@@ -1085,6 +1085,11 @@ class Database:
 
             if "name" in updates:
                 row.name = str(updates["name"]).strip()
+            if "key" in updates and updates["key"]:
+                new_key = str(updates["key"]).strip()
+                row.key = new_key
+                row.key_hash = hashlib.sha256(new_key.encode("utf-8")).hexdigest()
+                row.key_prefix = f"{new_key[:8]}...{new_key[-4:]}" if len(new_key) > 12 else new_key[:8]
             if "description" in updates:
                 row.description = str(updates["description"]).strip()
             if "is_active" in updates:

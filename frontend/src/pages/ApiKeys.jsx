@@ -209,6 +209,7 @@ export default function ApiKeys() {
     const payload = {
       name: formData.name.trim(),
       description: formData.description.trim(),
+      key: formData.key?.trim() || undefined,
       rpm_limit: Number(formData.rpm_limit) || 0,
       daily_limit: Number(formData.daily_limit) || 0,
       token_limit: Number(formData.token_limit) || 0,
@@ -643,22 +644,27 @@ export default function ApiKeys() {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-medium text-gray-300">
-                    API Key Token
+                    Auth Password / Key Secret
                   </label>
                   <button
                     type="button"
                     onClick={handleRegenerateKey}
                     className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1"
                   >
-                    <RefreshCw size={11} /> Generate New
+                    <RefreshCw size={11} /> Auto-Generate
                   </button>
                 </div>
                 <input
                   type="text"
+                  required
+                  placeholder="Enter custom auth password (e.g. dev-pass-123) or click Auto-Generate"
                   value={formData.key}
                   onChange={(e) => setFormData({ ...formData, key: e.target.value })}
                   className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white font-mono text-xs"
                 />
+                <p className="text-[11px] text-gray-500 mt-1">
+                  Clients will authenticate using this custom password or generated token via Bearer token or x-api-key.
+                </p>
               </div>
 
               {/* Rate Limits Grid */}
@@ -826,6 +832,22 @@ export default function ApiKeys() {
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-300 mb-1">
+                  Auth Password / Key Secret
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter new custom auth password to change"
+                  value={formData.key}
+                  onChange={(e) => setFormData({ ...formData, key: e.target.value })}
+                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white font-mono text-xs"
+                />
+                <p className="text-[11px] text-gray-500 mt-1">
+                  You can change this key's authentication password at any time.
+                </p>
               </div>
 
               {/* Status Switch */}

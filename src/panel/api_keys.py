@@ -27,7 +27,7 @@ router = APIRouter(prefix="/keys", tags=["api_keys"])
 class CreateApiKeyRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=128, description="Friendly label for the API key")
     description: Optional[str] = Field(default="", max_length=1000)
-    key: Optional[str] = Field(default=None, min_length=16, max_length=128, description="Custom key (min 16 chars) or auto-generated")
+    key: Optional[str] = Field(default=None, min_length=3, max_length=128, description="Custom auth password or auto-generated key")
     rpm_limit: Optional[int] = Field(default=0, ge=0, le=100000, description="Max requests per minute (0 = unlimited)")
     daily_limit: Optional[int] = Field(default=0, ge=0, le=10000000, description="Max requests per day (0 = unlimited)")
     token_limit: Optional[int] = Field(default=0, ge=0, description="Max lifetime token quota (0 = unlimited)")
@@ -38,6 +38,7 @@ class CreateApiKeyRequest(BaseModel):
 
 class UpdateApiKeyRequest(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    key: Optional[str] = Field(default=None, min_length=3, max_length=128, description="Change auth password")
     description: Optional[str] = Field(default=None, max_length=1000)
     rpm_limit: Optional[int] = Field(default=None, ge=0, le=100000)
     daily_limit: Optional[int] = Field(default=None, ge=0, le=10000000)
@@ -117,6 +118,13 @@ async def update_key(key_id: int, req: UpdateApiKeyRequest, token: str = Depends
 
     if "name" in provided_fields and provided_fields["name"]:
         updates["name"] = provided_fields["name"].strip()
+    if "key" in provided_fields and provided_fields["key"]:
+        new_raw_key = provided_fields["key"].strip()
+        new_kh = hash_key(new_raw_key)
+        existing_other = await db.get_api_key_by_hash(new_kh)
+        if existing_other and existing_other["id"] != key_id:
+            raise HTTPException(status_code=400, detail="This auth password is already in use by another key")
+        updates["key"] = new_raw_key
     if "description" in provided_fields:
         updates["description"] = (provided_fields["description"] or "").strip()
     if "rpm_limit" in provided_fields:
