@@ -19,12 +19,18 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import api from "../api";
 
-const PRESET_MODELS = [
-  "gemini-2.5-pro",
-  "gemini-2.5-flash",
+const DEFAULT_PRESET_MODELS = [
+  "gemini-3.8-flash-high",
+  "gemini-3.8-flash-medium",
+  "gemini-3.8-flash-low",
+  "gemini-3.8-flash-tiered",
   "claude-sonnet-4-6",
+  "claude-sonnet-4-6-thinking",
+  "claude-opus-4-6",
   "claude-opus-4-6-thinking",
   "gpt-oss-120b-medium",
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
 ];
 
 export default function ApiKeys() {
@@ -34,6 +40,8 @@ export default function ApiKeys() {
   const [copiedKey, setCopiedKey] = useState(null);
   const [revealedKeys, setRevealedKeys] = useState(new Set());
   const [message, setMessage] = useState(null);
+  const [availableModels, setAvailableModels] = useState(DEFAULT_PRESET_MODELS);
+  const [customModelInput, setCustomModelInput] = useState("");
 
   // Modals state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -72,9 +80,36 @@ export default function ApiKeys() {
     }
   }, []);
 
+  const fetchAvailableModels = useCallback(async () => {
+    try {
+      const res = await api.get("/keys/available-models");
+      if (Array.isArray(res.data) && res.data.length > 0) {
+        setAvailableModels((prev) => Array.from(new Set([...res.data, ...prev])));
+      }
+    } catch {
+      // Fallback remains DEFAULT_PRESET_MODELS
+    }
+  }, []);
+
   useEffect(() => {
     fetchKeys();
-  }, [fetchKeys]);
+    fetchAvailableModels();
+  }, [fetchKeys, fetchAvailableModels]);
+
+  const addCustomModel = () => {
+    const m = customModelInput.trim();
+    if (!m) return;
+    if (!availableModels.includes(m)) {
+      setAvailableModels((prev) => [...prev, m]);
+    }
+    if (!formData.models_allowed.includes(m)) {
+      setFormData((prev) => ({
+        ...prev,
+        models_allowed: [...(prev.models_allowed || []), m],
+      }));
+    }
+    setCustomModelInput("");
+  };
 
   const copyToClipboard = (text, id) => {
     navigator.clipboard.writeText(text);
@@ -92,6 +127,7 @@ export default function ApiKeys() {
   };
 
   const openCreateModal = async () => {
+    setCustomModelInput("");
     try {
       const res = await api.get("/keys/generate/candidate");
       setFormData({
@@ -143,6 +179,11 @@ export default function ApiKeys() {
     if (k.expires_at) {
       expiryOpt = "custom";
     }
+    const allowed = Array.isArray(k.models_allowed) ? k.models_allowed : [];
+    if (allowed.length > 0) {
+      setAvailableModels((prev) => Array.from(new Set([...prev, ...allowed])));
+    }
+    setCustomModelInput("");
     setFormData({
       id: k.id,
       name: k.name,
@@ -153,8 +194,8 @@ export default function ApiKeys() {
       token_limit: k.token_limit || 0,
       expiryOption: expiryOpt,
       expires_at: k.expires_at,
-      restrictModels: Array.isArray(k.models_allowed) && k.models_allowed.length > 0,
-      models_allowed: k.models_allowed || [],
+      restrictModels: allowed.length > 0,
+      models_allowed: allowed,
       is_active: k.is_active,
     });
     setEditingKey(k);
@@ -754,9 +795,14 @@ export default function ApiKeys() {
                 </div>
                 {formData.restrictModels && (
                   <div className="space-y-2 p-3 bg-dark-800/60 rounded-lg border border-dark-700">
-                    <div className="text-[11px] text-gray-400">Select allowed models:</div>
-                    <div className="flex flex-wrap gap-2">
-                      {PRESET_MODELS.map((m) => {
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] text-gray-400">Select allowed models:</div>
+                      <div className="text-[10px] text-purple-400">
+                        {formData.models_allowed?.length || 0} selected
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-0.5">
+                      {availableModels.map((m) => {
                         const checked = formData.models_allowed.includes(m);
                         return (
                           <button
@@ -765,14 +811,37 @@ export default function ApiKeys() {
                             onClick={() => toggleModelSelection(m)}
                             className={`px-2 py-1 text-xs rounded-md border font-mono transition-colors ${
                               checked
-                                ? "bg-purple-600 text-white border-purple-500"
-                                : "bg-dark-900 text-gray-400 border-dark-600 hover:text-white"
+                                ? "bg-purple-600 text-white border-purple-500 shadow-sm"
+                                : "bg-dark-900 text-gray-400 border-dark-600 hover:text-white hover:border-dark-500"
                             }`}
                           >
                             {m}
                           </button>
                         );
                       })}
+                    </div>
+                    <div className="flex items-center gap-2 pt-2 border-t border-dark-700/60">
+                      <input
+                        type="text"
+                        placeholder="Add custom or alias model name..."
+                        value={customModelInput}
+                        onChange={(e) => setCustomModelInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addCustomModel();
+                          }
+                        }}
+                        className="w-full px-2.5 py-1 bg-dark-900 border border-dark-600 rounded-md text-white text-xs font-mono placeholder:text-gray-500 focus:outline-none focus:border-purple-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={addCustomModel}
+                        className="px-3 py-1 bg-dark-700 hover:bg-dark-600 text-white text-xs font-medium rounded-md border border-dark-600 flex items-center gap-1 shrink-0 transition-colors"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add
+                      </button>
                     </div>
                   </div>
                 )}
@@ -925,9 +994,14 @@ export default function ApiKeys() {
                 </div>
                 {formData.restrictModels && (
                   <div className="space-y-2 p-3 bg-dark-800/60 rounded-lg border border-dark-700">
-                    <div className="text-[11px] text-gray-400">Select allowed models:</div>
-                    <div className="flex flex-wrap gap-2">
-                      {PRESET_MODELS.map((m) => {
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] text-gray-400">Select allowed models:</div>
+                      <div className="text-[10px] text-purple-400">
+                        {formData.models_allowed?.length || 0} selected
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-0.5">
+                      {availableModels.map((m) => {
                         const checked = formData.models_allowed.includes(m);
                         return (
                           <button
@@ -936,14 +1010,37 @@ export default function ApiKeys() {
                             onClick={() => toggleModelSelection(m)}
                             className={`px-2 py-1 text-xs rounded-md border font-mono transition-colors ${
                               checked
-                                ? "bg-purple-600 text-white border-purple-500"
-                                : "bg-dark-900 text-gray-400 border-dark-600 hover:text-white"
+                                ? "bg-purple-600 text-white border-purple-500 shadow-sm"
+                                : "bg-dark-900 text-gray-400 border-dark-600 hover:text-white hover:border-dark-500"
                             }`}
                           >
                             {m}
                           </button>
                         );
                       })}
+                    </div>
+                    <div className="flex items-center gap-2 pt-2 border-t border-dark-700/60">
+                      <input
+                        type="text"
+                        placeholder="Add custom or alias model name..."
+                        value={customModelInput}
+                        onChange={(e) => setCustomModelInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addCustomModel();
+                          }
+                        }}
+                        className="w-full px-2.5 py-1 bg-dark-900 border border-dark-600 rounded-md text-white text-xs font-mono placeholder:text-gray-500 focus:outline-none focus:border-purple-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={addCustomModel}
+                        className="px-3 py-1 bg-dark-700 hover:bg-dark-600 text-white text-xs font-medium rounded-md border border-dark-600 flex items-center gap-1 shrink-0 transition-colors"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add
+                      </button>
                     </div>
                   </div>
                 )}

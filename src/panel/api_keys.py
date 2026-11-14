@@ -17,6 +17,7 @@ from src.api_key_manager import (
 )
 from src.storage.database import get_database
 from src.utils import verify_panel_token
+from src.router.antigravity.model_list import get_antigravity_models_with_features
 
 
 router = APIRouter(prefix="/keys", tags=["api_keys"])
@@ -181,3 +182,28 @@ async def delete_key(key_id: int, token: str = Depends(verify_panel_token)):
 async def generate_candidate_key(token: str = Depends(verify_panel_token)):
     """Generate a random candidate key token (for the modal auto-fill)."""
     return {"key": generate_secure_key()}
+
+
+@router.get("/available-models", response_model=List[str])
+async def get_available_models(token: str = Depends(verify_panel_token)):
+    """Fetch live available model names (including base models and aliases) for restriction selection."""
+    try:
+        models = await get_antigravity_models_with_features()
+        base_models = [m for m in models if not m.startswith("autostitch-") and not m.startswith("抗截断-")]
+        variants = [m for m in models if m not in base_models]
+        return base_models + variants
+    except Exception as e:
+        log.warning(f"Failed to fetch available models for panel: {e}")
+        return [
+            "gemini-3.8-flash-high",
+            "gemini-3.8-flash-medium",
+            "gemini-3.8-flash-low",
+            "gemini-3.8-flash-tiered",
+            "claude-sonnet-4-6",
+            "claude-sonnet-4-6-thinking",
+            "claude-opus-4-6",
+            "claude-opus-4-6-thinking",
+            "gpt-oss-120b-medium",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+        ]
