@@ -11,7 +11,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 # Third-party libraries
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 # Local modules - Utilities and authentication
@@ -99,8 +99,25 @@ async def get_antigravity_models_with_features():
 
 # ==================== API Routes ====================
 
+def _filter_models_for_request(request: Request, models: list) -> list:
+    """Filter model list by API key permissions if restricted."""
+    if not hasattr(request, "state"):
+        return models
+    api_key = getattr(request.state, "api_key", None)
+    if not api_key or api_key.get("is_admin", False):
+        return models
+    allowed = api_key.get("models_allowed", [])
+    if not allowed:
+        return models
+    allowed_norm = {m.lower().strip() for m in allowed if m.strip()}
+    return [
+        m for m in models
+        if m.lower() in allowed_norm or get_base_model_from_feature_model(m).lower() in allowed_norm
+    ]
+
+
 @router.get("/v1beta/models")
-async def list_gemini_models(token: str = Depends(authenticate_flexible)):
+async def list_gemini_models(request: Request, token: str = Depends(authenticate_flexible)):
     """
     Return model list in Gemini format
     
@@ -108,6 +125,7 @@ async def list_gemini_models(token: str = Depends(authenticate_flexible)):
     and adds anti-truncation prefixes
     """
     models = await get_antigravity_models_with_features()
+    models = _filter_models_for_request(request, models)
     log.info("[ANTIGRAVITY MODEL LIST] Returning Gemini format")
     return JSONResponse(content=create_gemini_model_list(
         models,
@@ -116,7 +134,7 @@ async def list_gemini_models(token: str = Depends(authenticate_flexible)):
 
 
 @router.get("/v1/models")
-async def list_openai_models(token: str = Depends(authenticate_flexible)):
+async def list_openai_models(request: Request, token: str = Depends(authenticate_flexible)):
     """
     Return model list in OpenAI format
     
@@ -124,6 +142,7 @@ async def list_openai_models(token: str = Depends(authenticate_flexible)):
     and adds anti-truncation prefixes
     """
     models = await get_antigravity_models_with_features()
+    models = _filter_models_for_request(request, models)
     log.info("[ANTIGRAVITY MODEL LIST] Returning OpenAI format")
     model_list = create_openai_model_list(models, owned_by="google")
     return JSONResponse(content={

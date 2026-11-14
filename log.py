@@ -46,9 +46,9 @@ def _log(level: str, message: str):
     entry = f"[{timestamp}] [{level.upper()}] {message}"
 
     if level in ("error", "critical"):
-        print(entry, file=sys.stderr)
+        print(entry, file=sys.stderr, flush=True)
     else:
-        print(entry)
+        print(entry, flush=True)
 
 
 def set_log_level(level: str):
