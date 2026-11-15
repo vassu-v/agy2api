@@ -37,9 +37,6 @@ else
     cd ./agy2api
 fi
 
-# Pull latest code
-git pull
-
 # Create and sync virtual environment
 uv sync
 

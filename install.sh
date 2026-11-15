@@ -251,16 +251,6 @@ else
     cd ./agy2api || exit 1
 fi
 
-# Update repository if it's a git repo
-if [ -d ".git" ]; then
-    log_info "Updating repository..."
-    if ! git pull; then
-        log_warn "Git pull failed, continuing anyway..."
-    fi
-else
-    log_warn "Not a git repository, skipping update"
-fi
-
 # Create relocatable virtual environment to ensure portability
 log_info "Creating relocatable virtual environment..."
 export UV_VENV_CLEAR=1

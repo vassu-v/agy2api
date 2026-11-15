@@ -1,7 +1,6 @@
 import hmac
+import os
 from typing import Optional
-
-import httpx
 
 from config import get_api_password, get_panel_password
 from fastapi import Depends, HTTPException, Header, Query, Request, status
@@ -15,40 +14,12 @@ security = HTTPBearer()
 
 # Antigravity CLI client emulation constants
 _DEFAULT_ANTIGRAVITY_CLI_VERSION = "1.5.3"
-_LATEST_RELEASE_URL = (
-    "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/latest"
+
+# Pinned version (no network lookup); override with the ANTIGRAVITY_CLI_VERSION env var
+ANTIGRAVITY_CLI_VERSION = (
+    os.environ.get("ANTIGRAVITY_CLI_VERSION", "").strip().lstrip("vV")
+    or _DEFAULT_ANTIGRAVITY_CLI_VERSION
 )
-
-
-def _get_latest_antigravity_cli_version() -> str:
-    """Fetch latest Antigravity CLI version; returns default version on failure."""
-    try:
-        response = httpx.get(
-            _LATEST_RELEASE_URL,
-            headers={"Accept": "application/vnd.github+json"},
-            timeout=10.0,
-        )
-        response.raise_for_status()
-        release_data = response.json()
-    except (httpx.HTTPError, ValueError) as error:
-        log.warning(
-            "Failed to fetch latest Antigravity CLI version, using default version "
-            f"{_DEFAULT_ANTIGRAVITY_CLI_VERSION}: {error}"
-        )
-        return _DEFAULT_ANTIGRAVITY_CLI_VERSION
-
-    tag_name = release_data.get("tag_name") if isinstance(release_data, dict) else None
-    if not isinstance(tag_name, str) or not tag_name.strip():
-        log.warning(
-            "GitHub API response lacks valid tag_name, using default version "
-            f"{_DEFAULT_ANTIGRAVITY_CLI_VERSION}"
-        )
-        return _DEFAULT_ANTIGRAVITY_CLI_VERSION
-
-    return tag_name.strip().lstrip("vV")
-
-
-ANTIGRAVITY_CLI_VERSION = _get_latest_antigravity_cli_version()
 ANTIGRAVITY_CLI_PLATFORM = "windows/amd64"
 ANTIGRAVITY_USER_AGENT = f"antigravity/cli/{ANTIGRAVITY_CLI_VERSION} {ANTIGRAVITY_CLI_PLATFORM}"
 log.info(f"Current Antigravity CLI version: {ANTIGRAVITY_CLI_VERSION}")

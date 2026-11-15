@@ -1,6 +1,3 @@
-echo "Force syncing project code, discarding local changes..."
-git fetch --all
-git reset --hard origin/$(git rev-parse --abbrev-ref HEAD)
 echo "Creating virtual environment..."
 PYTHON_VERSION=$(python -V 2>&1 | grep -oP '\d+\.\d+' | head -1)
 if [ -n "$PYTHON_VERSION" ]; then

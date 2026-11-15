@@ -9,8 +9,6 @@ from fastapi.responses import JSONResponse
 
 from log import log
 
-from src.httpx_client import get_async
-
 
 # Create router
 router = APIRouter(prefix="/version", tags=["version"])
@@ -19,8 +17,9 @@ router = APIRouter(prefix="/version", tags=["version"])
 @router.get("/info")
 async def get_version_info(check_update: bool = False):
     """
-    Get current version information - Reads from version.txt
-    Optional parameter check_update: Whether to check for the latest version on GitHub
+    Get current version information - Reads from version.txt (local only).
+    The check_update parameter is accepted for frontend compatibility but ignored:
+    no remote update check is performed.
     """
     try:
         # Get project root directory
@@ -57,45 +56,8 @@ async def get_version_info(check_update: bool = False):
             "date": version_data.get('date', '')
         }
 
-        # If update check is needed
-        if check_update:
-            try:
-                # Directly get version.txt file from GitHub
-                github_version_url = "https://raw.githubusercontent.com/vassu-v/agy2api/refs/heads/master/version.txt"
-
-                # Use unified httpx client
-                resp = await get_async(github_version_url, timeout=10.0)
-
-                if resp.status_code == 200:
-                    # Parse remote version.txt
-                    remote_version_data = {}
-                    for line in resp.text.strip().split('\n'):
-                        line = line.strip()
-                        if '=' in line:
-                            key, value = line.split('=', 1)
-                            remote_version_data[key] = value
-
-                    latest_hash = remote_version_data.get('full_hash', '')
-                    latest_short_hash = remote_version_data.get('short_hash', '')
-                    current_hash = version_data.get('full_hash', '')
-
-                    has_update = (current_hash != latest_hash) if current_hash and latest_hash else None
-
-                    response_data['check_update'] = True
-                    response_data['has_update'] = has_update
-                    response_data['latest_version'] = latest_short_hash
-                    response_data['latest_hash'] = latest_hash
-                    response_data['latest_message'] = remote_version_data.get('message', '')
-                    response_data['latest_date'] = remote_version_data.get('date', '')
-                else:
-                    # GitHub fetch failed, but does not affect basic version info
-                    response_data['check_update'] = False
-                    response_data['update_error'] = f"GitHub returned error: {resp.status_code}"
-
-            except Exception as e:
-                log.debug(f"Failed to check for updates: {e}")
-                response_data['check_update'] = False
-                response_data['update_error'] = str(e)
+        # No remote update check: version info is read from the local version.txt only
+        response_data['check_update'] = False
 
         return JSONResponse(response_data)
 
